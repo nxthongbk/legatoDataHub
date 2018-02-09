@@ -1,0 +1,17 @@
+executables:
+{
+    sensord = ( sensor )
+}
+
+processes:
+{
+    run:
+    {
+        ( sensord )
+    }
+}
+
+bindings:
+{
+    sensord.sensor.io -> dataHub.io
+}

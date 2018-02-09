@@ -1,0 +1,18 @@
+
+executables:
+{
+    appInfoD = ( appInfo )
+}
+
+extern:
+{
+    appInfoD.appInfo.le_appInfo
+}
+
+processes:
+{
+    run:
+    {
+        ( appInfoD )
+    }
+}

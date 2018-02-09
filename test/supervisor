@@ -1,0 +1,19 @@
+#!/bin/bash
+
+_build_dataHub/localhost/app/dataHub/staging/read-only/bin/hubd &
+
+_build_sensor/localhost/app/sensor/staging/read-only/bin/sensord &
+SENSORPID=$!
+echo "Started sensor app with PID $SENSORPID."
+
+_build_actuator/localhost/app/actuator/staging/read-only/bin/actuatord &
+ACTUATORPID=$!
+echo "Started actuator app with PID $ACTUATORPID."
+
+_build_appInfoStub/localhost/app/appInfoStub/staging/read-only/bin/appInfoD --sensor=$SENSORPID --actuator=$ACTUATORPID &
+
+sleep 0.25
+
+#dhub set changeBy /obs/countBy2 2
+#dhub set source /obs/countBy2 /app/sensor/counter
+#dhub set source /app/actuator/counter /obs/countBy2

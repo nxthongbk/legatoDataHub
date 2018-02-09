@@ -1,0 +1,1465 @@
+//--------------------------------------------------------------------------------------------------
+/**
+ * Implementation of the Data Hub Admin API.
+ *
+ * Copyright (C) Sierra Wireless Inc.
+ */
+//--------------------------------------------------------------------------------------------------
+
+#include "dataHub.h"
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * @return A reference to the '/obs' namespace.  Creates it if necessary.
+ */
+//--------------------------------------------------------------------------------------------------
+static resTree_EntryRef_t GetObsNamespace
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsNamespace = resTree_GetEntry(resTree_GetRoot(), "obs");
+    LE_ASSERT(obsNamespace != NULL);
+
+    return obsNamespace;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Push a trigger type data sample to a resource.
+ *
+ * @note If the resource doesn't exist, the push will be ignored.  This will not cause a
+ *       Placeholder resource to be created.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_PushTrigger
+(
+    const char* path,
+        ///< [IN] Absolute resource tree path.
+    double timestamp
+        ///< [IN] Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
+        ///< Zero = now.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entry = resTree_FindEntryAtAbsolutePath(path);
+
+    if (entry != NULL)
+    {
+        resTree_Push(entry,
+                     IO_DATA_TYPE_TRIGGER,
+                     dataSample_CreateTrigger(timestamp));
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Push a Boolean type data sample to a resource.
+ *
+ * @note If the resource doesn't exist, the push will be ignored.  This will not cause a
+ *       Placeholder resource to be created.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_PushBoolean
+(
+    const char* path,
+        ///< [IN] Absolute resource tree path.
+    double timestamp,
+        ///< [IN] Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
+        ///< Zero = now.
+    bool value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entry = resTree_FindEntryAtAbsolutePath(path);
+
+    if (entry != NULL)
+    {
+        resTree_Push(entry,
+                     IO_DATA_TYPE_BOOLEAN,
+                     dataSample_CreateBoolean(timestamp, value));
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Push a numeric type data sample to a resource.
+ *
+ * @note If the resource doesn't exist, the push will be ignored.  This will not cause a
+ *       Placeholder resource to be created.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_PushNumeric
+(
+    const char* path,
+        ///< [IN] Absolute resource tree path.
+    double timestamp,
+        ///< [IN] Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
+        ///< Zero = now.
+    double value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entry = resTree_FindEntryAtAbsolutePath(path);
+
+    if (entry != NULL)
+    {
+        resTree_Push(entry,
+                     IO_DATA_TYPE_NUMERIC,
+                     dataSample_CreateNumeric(timestamp, value));
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Push a string type data sample to a resource.
+ *
+ * @note If the resource doesn't exist, the push will be ignored.  This will not cause a
+ *       Placeholder resource to be created.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_PushString
+(
+    const char* path,
+        ///< [IN] Absolute resource tree path.
+    double timestamp,
+        ///< [IN] Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
+        ///< Zero = now.
+    const char* value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entry = resTree_FindEntryAtAbsolutePath(path);
+
+    if (entry != NULL)
+    {
+        resTree_Push(entry,
+                     IO_DATA_TYPE_STRING,
+                     dataSample_CreateString(timestamp, value));
+    }
+}
+
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Push a JSON data sample to a resource.
+ *
+ * @note If the resource doesn't exist, the push will be ignored.  This will not cause a
+ *       Placeholder resource to be created.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_PushJson
+(
+    const char* path,
+        ///< [IN] Absolute resource tree path.
+    double timestamp,
+        ///< [IN] Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
+        ///< Zero = now.
+    const char* value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entry = resTree_FindEntryAtAbsolutePath(path);
+
+    if (entry != NULL)
+    {
+        resTree_Push(entry,
+                     IO_DATA_TYPE_JSON,
+                     dataSample_CreateJson(timestamp, value));
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Creates a data flow route from one resource to another by setting the data source for the
+ * destination resource.  If the destination resource already has a source resource, it will be
+ * replaced. Does nothing if the route already exists.
+ *
+ * Creates Placeholders for any resources that do not yet exist in the resource tree.
+ *
+ * @return
+ *  - LE_OK if route already existed or new route was successfully created.
+ *  - LE_BAD_PARAMETER if one of the paths is invalid.
+ *  - LE_DUPLICATE if the addition of this route would result in a loop.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_SetSource
+(
+    const char* destPath,
+        ///< [IN] Absolute path of destination resource.
+    const char* srcPath
+        ///< [IN] Absolute path of source resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t destEntry = resTree_GetResource(resTree_GetRoot(), destPath);
+    if (destEntry == NULL)
+    {
+        return LE_BAD_PARAMETER;
+    }
+    resTree_EntryRef_t srcEntry = resTree_GetResource(resTree_GetRoot(), srcPath);
+    if (srcEntry == NULL)
+    {
+        return LE_BAD_PARAMETER;
+    }
+
+    // Set the source.
+    return resTree_SetSource(destEntry, srcEntry);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fetches the data flow source resource from which a given resource expects to receive data
+ * samples.
+ *
+ * @note While an Input can have a source configured, it will ignore anything pushed to it
+ *       from other resources via that route. Inputs only accept values pushed by the app that
+ *       created them or from the administrator pushed directly to them via admin_Push().
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_BAD_PARAMETER if the path is invalid.
+ *  - LE_NOT_FOUND if the resource doesn't exist or doesn't have a source.
+ *  - LE_OVERFLOW if the path of the source resource won't fit in the string buffer provided.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_GetSource
+(
+    const char* destPath,
+        ///< [IN] Absolute path of destination resource.
+    char* srcPath,
+        ///< [OUT] Absolute path of source resource.
+    size_t srcPathSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(destPath);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return LE_NOT_FOUND;
+    }
+    else
+    {
+        resTree_EntryRef_t srcEntry = resTree_GetSource(resEntry);
+
+        if (srcEntry == NULL)
+        {
+            return LE_NOT_FOUND;
+        }
+
+        le_result_t result = resTree_GetPath(srcPath, srcPathSize, resTree_GetRoot(), srcEntry);
+
+        if (result >= 0)
+        {
+            return LE_OK;
+        }
+        else if (result == LE_OVERFLOW)
+        {
+            return LE_OVERFLOW;
+        }
+
+        LE_FATAL("Unexpected result %d (%s)", result, LE_RESULT_TXT(result));
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove the data flow route into a resource.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_RemoveSource
+(
+    const char* destPath
+        ///< [IN] Absolute path of destination resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t destEntry = resTree_GetResource(resTree_GetRoot(), destPath);
+    if (destEntry != NULL)
+    {
+        resTree_SetSource(destEntry, NULL);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get a reference to an Observation entry in the resource tree.
+ * Creates the Observation, if necessary.
+ *
+ * @return The entry reference or NULL if the path is malformed.
+ */
+//--------------------------------------------------------------------------------------------------
+static resTree_EntryRef_t GetObservation
+(
+    const char* path    ///< Absolute path under /obs/ or relative path from /obs/.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (strncmp(path, "/obs/", 5) == 0)
+    {
+        path += 5;
+    }
+    else if (path[0] == '/')
+    {
+        return NULL;
+    }
+
+    return resTree_GetObservation(GetObsNamespace(), path);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get a reference to an Observation entry in the resource tree, iff it already exists.
+ *
+ * @return The entry reference or NULL if the path is malformed or the object doesn't exist.
+ */
+//--------------------------------------------------------------------------------------------------
+static resTree_EntryRef_t FindObservation
+(
+    const char* path    ///< Absolute path under /obs/ or relative path from /obs/.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (strncmp(path, "/obs/", 5) == 0)
+    {
+        path += 5;
+    }
+    else if (path[0] == '/')
+    {
+        return NULL;
+    }
+
+    return resTree_FindEntry(GetObsNamespace(), path);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Create an Observation in the /obs/ namespace.
+ *
+ *  @return
+ *  - LE_OK if the observation was created or it already existed.
+ *  - LE_BAD_PARAMETER if the path is invalid.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_CreateObs
+(
+    const char* path
+        ///< [IN] Path within the /obs/ namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obs = GetObservation(path);
+    if (obs == NULL)
+    {
+        return LE_BAD_PARAMETER;
+    }
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete an Observation in the /obs/ namespace.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_DeleteObs
+(
+    const char* path
+        ///< [IN] Path within the /obs/ namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsNamespace = resTree_FindEntry(resTree_GetRoot(), "obs");
+
+    if (obsNamespace != NULL)
+    {
+        resTree_EntryRef_t entry = resTree_FindEntry(obsNamespace, path);
+
+        if (entry != NULL)
+        {
+            resTree_DeleteObservation(entry);
+        }
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the minimum period between data samples accepted by a given Observation.
+ *
+ * This is used to throttle the rate of data passing into and through an Observation.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetMinPeriod
+(
+    const char* path,
+        ///< [IN] Path within the /obs/ namespace.
+    double minPeriod
+        ///< [IN] The minimum period, in seconds.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+    }
+    else
+    {
+        resTree_SetMinPeriod(obsEntry, minPeriod);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the minimum period between data samples accepted by a given Observation.
+ *
+ * @return The value, or 0 if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+double admin_GetMinPeriod
+(
+    const char* path
+        ///< [IN] Path within the /obs/ namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = FindObservation(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return 0;
+    }
+    else
+    {
+        return resTree_GetMinPeriod(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the highest value in a range that will be accepted by a given Observation.
+ *
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetHighLimit
+(
+    const char* path,
+        ///< [IN] Path within the /obs/ namespace.
+    double highLimit
+        ///< [IN] The highest value in the range, or NAN (not a number) to remove limit.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+    }
+    else
+    {
+        resTree_SetHighLimit(obsEntry, highLimit);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the highest value in a range that will be accepted by a given Observation.
+ *
+ * @return The value, or NAN (not a number) if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+double admin_GetHighLimit
+(
+    const char* path
+        ///< [IN] Path within the /obs/ namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = FindObservation(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return NAN;
+    }
+    else
+    {
+        return resTree_GetHighLimit(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the lowest value in a range that will be accepted by a given Observation.
+ *
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetLowLimit
+(
+    const char* path,
+        ///< [IN] Path within the /obs/ namespace.
+    double lowLimit
+        ///< [IN] The lowest value in the range, or NAN (not a number) to remove limit.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+    }
+    else
+    {
+        resTree_SetLowLimit(obsEntry, lowLimit);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the lowest value in a range that will be accepted by a given Observation.
+ *
+ * @return The value, or NAN (not a number) if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+double admin_GetLowLimit
+(
+    const char* path
+        ///< [IN] Path within the /obs/ namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = FindObservation(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return NAN;
+    }
+    else
+    {
+        return resTree_GetLowLimit(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the magnitude that a new value must vary from the current value to be accepted by
+ * a given Observation.
+ *
+ * Ignored for trigger types.
+ *
+ * For all other types, any non-zero value means accept any change, but drop if the same as current.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetChangeBy
+(
+    const char* path,
+        ///< [IN] Path within the /obs/ namespace.
+    double change
+        ///< [IN] The magnitude, or either zero or NAN (not a number) to remove limit.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+    }
+    else
+    {
+        resTree_SetChangeBy(obsEntry, change);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the magnitude that a new value must vary from the current value to be accepted by
+ * a given Observation.
+ *
+ * @return The value, or 0 if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+double admin_GetChangeBy
+(
+    const char* path
+        ///< [IN] Path within the /obs/ namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = FindObservation(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return 0;
+    }
+    else
+    {
+        return resTree_GetChangeBy(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the maximum number of data samples to buffer in a given Observation.  Buffers are FIFO
+ * circular buffers. When full, the buffer drops the oldest value to make room for a new addition.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetBufferMaxCount
+(
+    const char* path,
+        ///< [IN] Path within the /obs/ namespace.
+    uint32_t count
+        ///< [IN] The number of samples to buffer (0 = remove setting).
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+    }
+    else
+    {
+        resTree_SetBufferMaxCount(obsEntry, count);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the buffer size setting for a given Observation.
+ *
+ * @return The buffer size (in number of samples) or 0 if not set or the Observation does not exist.
+ */
+//--------------------------------------------------------------------------------------------------
+uint32_t admin_GetBufferMaxCount
+(
+    const char* path
+        ///< [IN] Path within the /obs/ namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = FindObservation(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return 0;
+    }
+    else
+    {
+        return resTree_GetBufferMaxCount(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the minimum time between backups of an Observation's buffer to non-volatile storage.
+ * If the buffer's size is non-zero and the backup period is non-zero, then the buffer will be
+ * backed-up to non-volatile storage when it changes, but never more often than this period setting
+ * specifies.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetBufferBackupPeriod
+(
+    const char* path,
+        ///< [IN] Path within the /obs/ namespace.
+    uint32_t seconds
+        ///< [IN] The minimum number of seconds between backups (0 = disable backups)
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+    }
+    else
+    {
+        resTree_SetBufferBackupPeriod(obsEntry, seconds);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the minimum time between backups of an Observation's buffer to non-volatile storage.
+ * See admin_SetBufferBackupPeriod() for more information.
+ *
+ * @return The buffer backup period (in seconds) or 0 if backups are disabled or the Observation
+ *         does not exist.
+ */
+//--------------------------------------------------------------------------------------------------
+uint32_t admin_GetBufferBackupPeriod
+(
+    const char* path
+        ///< [IN] Path within the /obs/ namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = FindObservation(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return 0;
+    }
+    else
+    {
+        return resTree_GetBufferBackupPeriod(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set a default value for a given resource.
+ *
+ * @note Default will be discarded by an Input or Output resource if the default's data type
+ *       does not match the data type of the Input or Output.
+ */
+//--------------------------------------------------------------------------------------------------
+static void SetDefault
+(
+    const char* path, ///< [IN] Absolute path of the resource.
+    io_DataType_t dataType,
+    dataSample_Ref_t value
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_GetResource(resTree_GetRoot(), path);
+
+    if (resEntry == NULL)
+    {
+        LE_ERROR("Malformed resource path '%s'.", path);
+        le_mem_Release(value);
+    }
+    else
+    {
+        resTree_SetDefault(resEntry, dataType, value);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the default value of a resource to a Boolean value.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetBooleanDefault
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    bool value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    SetDefault(path, IO_DATA_TYPE_BOOLEAN, dataSample_CreateBoolean(0, value));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the default value of a resource to a numeric value.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetNumericDefault
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    double value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    SetDefault(path, IO_DATA_TYPE_NUMERIC, dataSample_CreateNumeric(0, value));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the default value of a resource to a string value.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetStringDefault
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    const char* value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    SetDefault(path, IO_DATA_TYPE_STRING, dataSample_CreateString(0, value));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the default value of a resource to a JSON value.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetJsonDefault
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    const char* value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    SetDefault(path, IO_DATA_TYPE_JSON, dataSample_CreateJson(0, value));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Discover whether a given resource has a default value.
+ *
+ * @return true if there is a default value set, false if not.
+ */
+//--------------------------------------------------------------------------------------------------
+bool admin_HasDefault
+(
+    const char* path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return false;
+    }
+    else
+    {
+        return resTree_HasDefault(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the data type of the default value that is currently set on a given resource.
+ *
+ * @return The data type, or IO_DATA_TYPE_TRIGGER if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+io_DataType_t admin_GetDefaultDataType
+(
+    const char* path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return IO_DATA_TYPE_TRIGGER;
+    }
+    else
+    {
+        return resTree_GetDefaultDataType(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the default value of a resource, if it is Boolean.
+ *
+ * @return the default value, or false if not set or set to another data type.
+ */
+//--------------------------------------------------------------------------------------------------
+bool admin_GetBooleanDefault
+(
+    const char* path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return false;
+    }
+    else
+    {
+        dataSample_Ref_t defaultValue = resTree_GetDefaultValue(resEntry);
+
+        if (   (defaultValue == NULL)
+            || (resTree_GetDefaultDataType(resEntry) != IO_DATA_TYPE_BOOLEAN)  )
+        {
+            return NAN;
+        }
+
+        return dataSample_GetBoolean(defaultValue);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the default value, if it is numeric.
+ *
+ * @return the default value, or NAN (not a number) if not set or set to another data type.
+ */
+//--------------------------------------------------------------------------------------------------
+double admin_GetNumericDefault
+(
+    const char* path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return NAN;
+    }
+    else
+    {
+        dataSample_Ref_t defaultValue = resTree_GetDefaultValue(resEntry);
+
+        if (   (defaultValue == NULL)
+            || (resTree_GetDefaultDataType(resEntry) != IO_DATA_TYPE_NUMERIC)  )
+        {
+            return NAN;
+        }
+
+        return dataSample_GetNumeric(defaultValue);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the default value, if it is a string.
+ *
+ * @return
+ *  - LE_OK if successful,
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the value.
+ *  - LE_NOT_FOUND if the resource doesn't have a string default value set.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_GetStringDefault
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    char* value,
+        ///< [OUT]
+    size_t valueSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return LE_NOT_FOUND;
+    }
+    else
+    {
+        dataSample_Ref_t defaultValue = resTree_GetDefaultValue(resEntry);
+
+        if (   (defaultValue == NULL)
+            || (resTree_GetDefaultDataType(resEntry) != IO_DATA_TYPE_STRING)  )
+        {
+            return LE_NOT_FOUND;
+        }
+
+        return le_utf8_Copy(value, dataSample_GetString(defaultValue), valueSize, NULL);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the default value, in JSON format.
+ *
+ * @note This works for any type of default value.
+ *
+ * @return
+ *  - LE_OK if successful,
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the value.
+ *  - LE_NOT_FOUND if the resource doesn't have a default value set.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_GetJsonDefault
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    char* value,
+        ///< [OUT]
+    size_t valueSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return LE_NOT_FOUND;
+    }
+    else
+    {
+        dataSample_Ref_t defaultValue = resTree_GetDefaultValue(resEntry);
+
+        if (defaultValue == NULL)
+        {
+            return LE_NOT_FOUND;
+        }
+
+        return dataSample_ConvertToJson(defaultValue,
+                                        resTree_GetDefaultDataType(resEntry),
+                                        value,
+                                        valueSize);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove any default value on a given resource.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_RemoveDefault
+(
+    const char* LE_NONNULL path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry != NULL) && (resTree_IsResource(resEntry)))
+    {
+        resTree_RemoveDefault(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set an override on a given resource.
+ *
+ * @note Override will be discarded by an Input or Output resource if the override's data type
+ *       does not match the data type of the Input or Output.
+ */
+//--------------------------------------------------------------------------------------------------
+static void SetOverride
+(
+    const char* path, ///< [IN] Absolute path of the resource.
+    io_DataType_t dataType,
+    dataSample_Ref_t value
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_GetResource(resTree_GetRoot(), path);
+
+    if (resEntry == NULL)
+    {
+        LE_ERROR("Malformed resource path '%s'.", path);
+        le_mem_Release(value);
+    }
+    else
+    {
+        resTree_SetOverride(resEntry, dataType, value);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set an override of Boolean type on a given resource.
+ *
+ * @note Override will be ignored by an Input or Output resource if the override's data type
+ *       does not match the data type of the Input or Output.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetBooleanOverride
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    bool value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    SetOverride(path, IO_DATA_TYPE_BOOLEAN, dataSample_CreateBoolean(0, value));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set an override of numeric type on a given resource.
+ *
+ * @note Override will be ignored by an Input or Output resource if the override's data type
+ *       does not match the data type of the Input or Output.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetNumericOverride
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    double value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    SetOverride(path, IO_DATA_TYPE_NUMERIC, dataSample_CreateNumeric(0, value));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set an override of string type on a given resource.
+ *
+ * @note Override will be ignored by an Input or Output resource if the override's data type
+ *       does not match the data type of the Input or Output.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetStringOverride
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    const char* value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    SetOverride(path, IO_DATA_TYPE_STRING, dataSample_CreateString(0, value));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set an override of JSON type on a given resource.
+ *
+ * @note Override will be ignored by an Input or Output resource if the override's data type
+ *       does not match the data type of the Input or Output.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetJsonOverride
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    const char* value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    SetOverride(path, IO_DATA_TYPE_JSON, dataSample_CreateJson(0, value));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Find out whether the resource currently has an override in effect.
+ *
+ * @return true if the resource is overridden, false otherwise.
+ */
+//--------------------------------------------------------------------------------------------------
+bool admin_IsOverridden
+(
+    const char* path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return false;
+    }
+    else
+    {
+        return resTree_IsOverridden(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove any override on a given resource.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_RemoveOverride
+(
+    const char* path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry != NULL) && (resTree_IsResource(resEntry)))
+    {
+        resTree_RemoveOverride(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the name of the first child entry under a given parent entry in the resource tree.
+ *
+ * @return
+ *  - LE_OK if successful
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the child's path.
+ *  - LE_NOT_FOUND if the resource doesn't have any children.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_GetFirstChild
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    char* child,
+        ///< [OUT] Absolute path of the first child resource.
+    size_t childSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t parentEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if (parentEntry == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    resTree_EntryRef_t childEntry = resTree_GetFirstChild(parentEntry);
+
+    if (childEntry == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    le_result_t result = resTree_GetPath(child, childSize, resTree_GetRoot(), childEntry);
+
+    if (result >= 0)
+    {
+        return LE_OK;
+    }
+    else if (result == LE_OVERFLOW)
+    {
+        return LE_OVERFLOW;
+    }
+
+    LE_FATAL("Unexpected result: %d (%s)", result, LE_RESULT_TXT(result));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the name of the next child entry under the same parent as a given entry in the resource tree.
+ *
+ * @return
+ *  - LE_OK if successful
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the next sibling's path.
+ *  - LE_NOT_FOUND if the resource is the last child in its parent's list of children.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_GetNextSibling
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    char* sibling,
+        ///< [OUT] Absolute path of the next sibling resource.
+    size_t siblingSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entryRef = resTree_FindEntryAtAbsolutePath(path);
+
+    if (entryRef == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    resTree_EntryRef_t siblingRef = resTree_GetNextSibling(entryRef);
+
+    if (siblingRef == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    le_result_t result = resTree_GetPath(sibling, siblingSize, resTree_GetRoot(), siblingRef);
+
+    if (result >= 0)
+    {
+        return LE_OK;
+    }
+    else if (result == LE_OVERFLOW)
+    {
+        return LE_OVERFLOW;
+    }
+
+    LE_FATAL("Unexpected result: %d (%s)", result, LE_RESULT_TXT(result));
+}
+
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Find out what type of entry lives at a given path in the resource tree.
+ *
+ * @return The entry type. ADMIN_ENTRY_TYPE_NONE if there's no entry at the given path.
+ */
+//--------------------------------------------------------------------------------------------------
+admin_EntryType_t admin_GetEntryType
+(
+    const char* path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entry = resTree_FindEntryAtAbsolutePath(path);
+
+    if (entry == NULL)
+    {
+        return ADMIN_ENTRY_TYPE_NONE;
+    }
+    else
+    {
+        return resTree_GetEntryType(entry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Find out what units a given resource has.
+ *
+ * An empty string ("") means the units are unspecified for this resource.
+ *
+ * @return
+ *  - LE_OK if successful
+ *  - LE_NOT_FOUND if there's no resource at the given path.
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the units string.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_GetUnits
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    char* unitsBuff,
+        ///< [OUT] Buffer to store the units string in.
+    size_t unitsBuffSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((entry == NULL) || (!resTree_IsResource(entry)))
+    {
+        return LE_NOT_FOUND;
+    }
+
+    const char* units = resTree_GetUnits(entry);
+
+    if (le_utf8_Copy(unitsBuff, units, unitsBuffSize, NULL) != LE_OK)
+    {
+        LE_ERROR("Units string buffer too short.");
+        return LE_OVERFLOW;
+    }
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Find out what data type a given resource currently has.
+ *
+ * Note that the data type of Inputs and Outputs are set by the app that creates those resources.
+ * All other resources will change data types as values are pushed to them.
+ *
+ * @return
+ *  - LE_OK if successful
+ *  - LE_NOT_FOUND if there's no resource at the given path.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_GetDataType
+(
+    const char* path,
+        ///< [IN] Absolute path of the resource.
+    io_DataType_t* dataTypePtr
+        ///< [OUT] The data type, if LE_OK is returned.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((entry == NULL) || (!resTree_IsResource(entry)))
+    {
+        return LE_NOT_FOUND;
+    }
+
+    *dataTypePtr = resTree_GetDataType(entry);
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Signal to the Data Hub that all pending administrative changes have been applied and that
+ * normal operation may resume.
+ *
+ * This may trigger clean-up actions, such as deleting non-volatile backups of any Observations
+ * that do not exist at the time this function is called.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_EndUpdate
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_INFO("Data Hub administrative updates complete.");
+
+    // TODO: Clean up orphaned Observation buffer backup files.
+}

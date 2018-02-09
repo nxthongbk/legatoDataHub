@@ -1,0 +1,27 @@
+//--------------------------------------------------------------------------------------------------
+/**
+ * Component definition for the Data Hub admin command-line tool "dhub".
+ *
+ * Copyright (C) Sierra Wireless Inc.
+ */
+//--------------------------------------------------------------------------------------------------
+
+sources:
+{
+    tool.c
+}
+
+requires:
+{
+    api:
+    {
+        admin.api [manual-start]
+        query.api [manual-start]
+        io.api [manual-start]
+    }
+}
+
+cflags:
+{
+    -std=c99
+}

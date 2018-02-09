@@ -1,0 +1,9 @@
+/** @mainpage Docs
+
+@subpage c_dataHubIo <br>
+@subpage c_dataHubAdmin <br>
+@subpage c_dataHubQuery <br>
+
+Copyright (C) Sierra Wireless Inc.
+
+**/

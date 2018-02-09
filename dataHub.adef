@@ -1,0 +1,48 @@
+//--------------------------------------------------------------------------------------------------
+/**
+ * Application Definition for the Data Hub app.
+ *
+ * The Data Hub ("Hub" for short) is the central hub for the flow of control system data, such as
+ * sensor input and actuator setpoints. It is designed to enumerate available data sources
+ * (inputs/sensors) and sinks (actuators/outputs), provide filtering and buffering of input data,
+ * direct the flow of data between apps connected into the Hub, and provide administrative
+ * interfaces for dynamic discovery of I/O points, setting and clearing overrides, and
+ * configuration of the Hub itself.
+ *
+ * Copyright (C) Sierra Wireless Inc.
+ */
+//--------------------------------------------------------------------------------------------------
+
+executables:
+{
+    hubd = ( components/dataHub )
+    dhub = ( components/adminTool )
+}
+
+processes:
+{
+    run:
+    {
+        dataHub = ( hubd )
+    }
+}
+
+extern:
+{
+    hubd.dataHub.le_appInfo
+    hubd.dataHub.io
+    hubd.dataHub.admin
+    hubd.dataHub.query
+
+    dhubToolAdmin = dhub.adminTool.admin
+    dhubToolQuery = dhub.adminTool.query
+    dhubToolIo = dhub.adminTool.io
+}
+
+bindings:
+{
+    dhub.adminTool.admin -> hubd.dataHub.admin
+    dhub.adminTool.query -> hubd.dataHub.query
+    dhub.adminTool.io -> hubd.dataHub.io
+    hubd.dataHub.le_appInfo -> <root>.le_appInfo
+}

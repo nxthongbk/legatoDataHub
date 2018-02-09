@@ -1,0 +1,12 @@
+requires:
+{
+    api:
+    {
+        io.api
+    }
+}
+
+sources:
+{
+    sensor.c
+}

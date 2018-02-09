@@ -1,0 +1,12 @@
+provides:
+{
+    api:
+    {
+        le_appInfo.api
+    }
+}
+
+sources:
+{
+    appInfoStub.c
+}

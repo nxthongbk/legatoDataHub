@@ -1,0 +1,42 @@
+//--------------------------------------------------------------------------------------------------
+// The Data Hub component.  This component implements the bulk of the Data Hub daemon.
+//
+// Copyright (C) Sierra Wireless Inc.
+//--------------------------------------------------------------------------------------------------
+
+provides:
+{
+    api:
+    {
+        io.api
+        admin.api
+        query.api
+    }
+}
+
+requires:
+{
+    api:
+    {
+        le_limit.api [types-only]
+        le_appInfo.api
+    }
+}
+
+sources:
+{
+    dataHub.c
+    dataSample.c
+    resTree.c
+    ioService.c
+    adminService.c
+    queryService.c
+    resource.c
+    ioPoint.c
+    obs.c
+}
+
+cflags:
+{
+    -std=c99
+}

@@ -1,0 +1,17 @@
+executables:
+{
+    actuatord = ( actuator )
+}
+
+processes:
+{
+    run:
+    {
+        ( actuatord )
+    }
+}
+
+bindings:
+{
+    actuatord.actuator.io -> dataHub.io
+}

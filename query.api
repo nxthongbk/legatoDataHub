@@ -1,0 +1,338 @@
+//--------------------------------------------------------------------------------------------------
+/**
+ * @page c_dataHubQuery Data Hub Query API
+ *
+ * @ref query_interface.h "API Reference"
+ *
+ * The Data Hub Query API provides its clients with the ability to query resources within the
+ * Data Hub's resource tree.
+ *
+ * There are two types of query supported:
+ * - Fetching of values
+ * - Statistical analysis of buffered data sets
+ *
+ *
+ * @section c_dataHubQuery_Fetching Fetching Data
+ *
+ * All resources in the Data Hub's resource tree, including Inputs, Outputs, and Observations,
+ * have a "current value", which is the last value accepted by the resource. All resources can have
+ * their current value fetched using one of the following functions:
+ *  - query_GetDataType() - get the current data type of the resource (could be unknown)
+ *  - query_GetUnits() - get the resource's units (could be unspecified)
+ *  - query_GetTimestamp() - get the timestamp of the current value of the resource (any data type)
+ *  - query_GetBoolean() - get the current value of the resource, if the data type is Boolean
+ *  - query_GetNumeric() - get the current value of the resource, if the data type is numeric
+ *  - query_GetString() - get the current value of the resource, if the data type is string
+ *  - query_GetJson() - get the current value of the resource in JSON format (with any data type)
+ *
+ * In addition, some Input resources support on-demand polling.
+ * These Input resources can be polled for a fresh value by calling one of the following
+ * polling functions:
+ *  - query_PollBoolean()
+ *  - query_PollNumeric()
+ *  - query_PollString()
+ *  - query_PollJson()
+ *
+ * @note It makes no sense to poll a trigger type input, because triggers have no value.
+ *
+ * Some Inputs do not support polling. If such an input is polled, the current value will be
+ * returned instead of a freshly sampled value.
+ *
+ * To check if a resource supports polling, call query_IsPollable().
+ *
+ * All Observations that have non-zero buffer sizes with any type of data in them can have
+ * data fetched from their buffers in JSON format using
+ *  - query_ReadBufferJson()
+ *
+ *
+ * @section c_dataHubQuery_Statistics Data Set Statistics
+ *
+ * If an Observation is configured with a non-zero buffer size, it will collect a set of data
+ * in its buffer over time. Such Observations that are collecting numerical data sets support
+ * statistical queries on their data sets using the following functions:
+ *  - query_GetMin()
+ *  - query_GetMax()
+ *  - query_GetMean()
+ *  - query_GetStdDev()
+ *
+ * All of these functions return a numerical (floating-point) value.
+ *
+ *
+ * @section c_dataHubQuery_Watching Watching Resources
+ *
+ * Clients of the Admin API can register to receive call-backs whenever the current value
+ * of a any given resource gets updated.  The following functions are used to register
+ * update notification handlers for different types of data:
+ * - query_AddTriggerPushHandler() - notify of update, regardless of data type, but w/o a value.
+ * - query_AddBooleanPushHandler() - notify whenever current value is updated to a Boolean value.
+ * - query_AddNumericPushHandler() - notify whenever current value is updated to a numeric value.
+ * - query_AddStringPushHandler() - notify whenever current value is updated to a string value.
+ * - query_AddJsonPushHandler() - notify of update, regardless of data type, converted to JSON.
+ *
+ * Of course, these handlers can also be removed:
+ * - query_RemoveTriggerPushHandler()
+ * - query_RemoveBooleanPushHandler()
+ * - query_RemoveNumericPushHandler()
+ * - query_RemoveStringPushHandler()
+ * - query_RemoveJsonPushHandler()
+ *
+ *
+ * Copyright (C) Sierra Wireless Inc.
+ *
+ * @file query_interface.h
+ */
+//--------------------------------------------------------------------------------------------------
+
+
+USETYPES io.api;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read data out of a buffer.  Data is written to a given file descriptor in JSON-encoded format
+ * as an array of objects containing a timestamp and a value (or just a timestamp for triggers).
+ * E.g.,
+ *
+ * @code
+ * [{"t":1537483647.125,"v":true},{"t":1537483657.128,"v":true}]
+ * @endcode
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist.
+ *  - LE_NO_MEMORY if the Observation's buffer size is zero.
+ *  - LE_COMM_ERROR if an error occurred while writing to the file descriptor.
+ *  - LE_DUPLICATE if the same client already has an unfinished read operation in progress.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t ReadBufferJson
+(
+    string obsPath[io.MAX_RESOURCE_PATH_LEN] IN, ///< Observation path. Can be absolute
+                                                 ///< (beginning with a '/') or relative to /obs/.
+    double startAfter IN, ///< Start after this many seconds ago,
+                          ///< or after an absolute number of seconds since the Epoch
+                          ///< (if startafter > 30 years).
+                          ///< Use NAN (not a number) to read the whole buffer.
+    file outputFile IN ///< File descriptor to write the data to.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the minimum value found in an Observation's data set withing a given time span.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION double GetMin
+(
+    string obsPath[io.MAX_RESOURCE_PATH_LEN] IN, ///< Observation path. Can be absolute
+                                                 ///< (beginning with a '/') or relative to /obs/.
+    double startTime IN  ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the maximum value found within a given time span in an Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION double GetMax
+(
+    string obsPath[io.MAX_RESOURCE_PATH_LEN] IN, ///< Observation path. Can be absolute
+                                                 ///< (beginning with a '/') or relative to /obs/.
+    double startTime IN  ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the mean (average) of all values found within a given time span in an Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION double GetMean
+(
+    string obsPath[io.MAX_RESOURCE_PATH_LEN] IN, ///< Observation path. Can be absolute
+                                                 ///< (beginning with a '/') or relative to /obs/.
+    double startTime IN  ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the standard deviation of all values found within a given time span in an
+ * Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION double GetStdDev
+(
+    string obsPath[io.MAX_RESOURCE_PATH_LEN] IN, ///< Observation path. Can be absolute
+                                                 ///< (beginning with a '/') or relative to /obs/.
+    double startTime IN  ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the current data type of a resource.
+ *
+ * @note Observations and Placeholders will default to IO_DATA_TYPE_TRIGGER, but will change
+ *       types as other types of data are pushed to them.  The data types of Inputs and Outputs
+ *       are decided by the apps that create them.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the resource was not found.
+ *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetDataType
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Resource path. Can be absolute (beginning
+                                              ///< with a '/') or relative to the namespace of
+                                              ///< the calling app (/app/<app-name>/).
+    io.DataType dataType OUT    ///< The fetched data type, if LE_OK is returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the current units of a resource.
+ *
+ * @note Observations and Placeholders will default to "", but will change units as data is
+ *       pushed to them.  The units of Inputs and Outputs are decided by the apps that create them.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the resource was not found.
+ *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetUnits
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Resource path. Can be absolute (beginning
+                                              ///< with a '/') or relative to the namespace of
+                                              ///< the calling app (/app/<app-name>/).
+    string units[io.MAX_UNITS_NAME_LEN] OUT   ///< The fetched units, if LE_OK is returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the timestamp of the current value of a resource.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the resource was not found.
+ *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
+ *  - LE_UNAVAILABLE if the resource doesn't have a current value (yet).
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetTimestamp
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Resource path. Can be absolute (beginning
+                                              ///< with a '/') or relative to the namespace of
+                                              ///< the calling app (/app/<app-name>/).
+    double timestamp OUT ///< The fetched timestamp (in seconds since the Epoch), if LE_OK returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the current value of a resource, if it's Boolean type.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the resource was not found.
+ *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
+ *  - LE_UNAVAILABLE if the resource doesn't have a current value (yet).
+ *  - LE_FORMAT_ERROR if the resource has another data type.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetBoolean
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Resource path. Can be absolute (beginning
+                                              ///< with a '/') or relative to the namespace of
+                                              ///< the calling app (/app/<app-name>/).
+    double timestamp OUT, ///< Fetched timestamp (in seconds since the Epoch), if LE_OK returned.
+    bool value OUT  ///< Fetched value, if LE_OK returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the current value of a resource, if it's numeric type.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the resource was not found.
+ *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
+ *  - LE_UNAVAILABLE if the resource doesn't have a current value (yet).
+ *  - LE_FORMAT_ERROR if the resource has another data type.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetNumeric
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Resource path. Can be absolute (beginning
+                                              ///< with a '/') or relative to the namespace of
+                                              ///< the calling app (/app/<app-name>/).
+    double timestamp OUT, ///< Fetched timestamp (in seconds since the Epoch), if LE_OK returned.
+    double value OUT  ///< Fetched value, if LE_OK returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the current value of a resource, if it's a string type.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the resource was not found.
+ *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
+ *  - LE_UNAVAILABLE if the resource doesn't have a current value (yet).
+ *  - LE_FORMAT_ERROR if the resource has another data type.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetString
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Resource path. Can be absolute (beginning
+                                              ///< with a '/') or relative to the namespace of
+                                              ///< the calling app (/app/<app-name>/).
+    double timestamp OUT, ///< Fetched timestamp (in seconds since the Epoch), if LE_OK returned.
+    string value[io.MAX_STRING_VALUE_LEN] OUT  ///< Fetched value, if LE_OK returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the current value of a resource of any type, in JSON format.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the resource was not found.
+ *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
+ *  - LE_UNAVAILABLE if the resource doesn't have a current value (yet).
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetJson
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Resource path. Can be absolute (beginning
+                                              ///< with a '/') or relative to the namespace of
+                                              ///< the calling app (/app/<app-name>/).
+    double timestamp OUT, ///< Fetched timestamp (in seconds since the Epoch), if LE_OK returned.
+    string value[io.MAX_STRING_VALUE_LEN] OUT  ///< Fetched value, if LE_OK returned.
+);
