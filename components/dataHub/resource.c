@@ -228,7 +228,6 @@ void res_Destruct
 
     if (resPtr->currentValue != NULL)
     {
-        LE_WARN("Resource had a current value.");
         le_mem_Release(resPtr->currentValue);
         resPtr->currentValue = NULL;
     }
@@ -411,7 +410,6 @@ static void UpdateCurrentValue
     {
         le_mem_Release(resPtr->currentValue);
     }
-    le_mem_AddRef(dataSample);
     resPtr->currentType = dataType;
     resPtr->currentValue = dataSample;
 
@@ -474,6 +472,8 @@ void res_Push
     LE_ASSERT(resPtr->entryRef != NULL);
     admin_EntryType_t entryType = resTree_GetEntryType(resPtr->entryRef);
 
+    // Record this as the latest pushed value, even if it doesn't get accepted as the new
+    // current value.
     if (resPtr->pushedValue != NULL)
     {
         le_mem_Release(resPtr->pushedValue);

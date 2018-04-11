@@ -1006,12 +1006,17 @@ void resTree_DeleteIO
     }
     else
     {
+        // Detach the IO resource from the resource tree entry (converting it into a namespace).
         entryRef->resourcePtr = NULL;
         entryRef->type = ADMIN_ENTRY_TYPE_NAMESPACE;
-        le_mem_Release(entryRef);
-        le_mem_Release(ioPtr);
-    }
 
+        // Release the IO resource.
+        le_mem_Release(ioPtr);
+
+        // Release the resource tree entry.
+        // This will cause it to be removed from the resource tree.
+        le_mem_Release(entryRef);
+    }
 }
 
 
@@ -1026,12 +1031,15 @@ void resTree_DeleteObservation
 )
 //--------------------------------------------------------------------------------------------------
 {
-    res_Resource_t* obsPtr = obsEntry->resourcePtr;
-    obsEntry->resourcePtr = NULL;
-    res_DeleteObservation(obsPtr);
+    // Delete the Observation resource object.
+    res_DeleteObservation(obsEntry->resourcePtr);
 
+    // Convert the resource tree entry into a namespace, detaching the Observation resource from it.
+    obsEntry->resourcePtr = NULL;
     obsEntry->type = ADMIN_ENTRY_TYPE_NAMESPACE;
 
+    // Release the namespace (resource tree entry).  This will cause it to be removed from the
+    // resource tree.
     le_mem_Release(obsEntry);
 }
 
