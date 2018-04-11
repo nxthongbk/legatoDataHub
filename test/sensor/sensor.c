@@ -24,7 +24,7 @@ static void TimerExpired
 
     counter++;
 
-    io_PushNumeric(COUNTER_NAME, 0.0, counter);
+    io_PushNumeric(COUNTER_NAME, IO_NOW, counter);
 
     // On the 3rd push, do some additional testing.
     if (counter == 3.0)
