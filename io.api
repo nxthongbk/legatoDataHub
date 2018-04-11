@@ -211,6 +211,14 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Constant used in place of a timestamp, when pushing samples to the Data Hub, to ask the Data Hub
+ * to generate a timestamp for the sample.
+ */
+//--------------------------------------------------------------------------------------------------
+DEFINE NOW = 0.0;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Maximum number of bytes (excluding null terminator) in an I/O resource's path within its
  * namespace in the Data Hub's resource tree.
  */
@@ -309,7 +317,7 @@ FUNCTION PushTrigger
 (
     string path[MAX_RESOURCE_PATH_LEN] IN,///< Resource path within the client app's namespace.
     double timestamp IN ///< Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
-                        ///< Zero = now.
+                        ///< IO_NOW = now.
 );
 
 
@@ -322,7 +330,7 @@ FUNCTION PushBoolean
 (
     string path[MAX_RESOURCE_PATH_LEN] IN,///< Resource path within the client app's namespace.
     double timestamp IN,///< Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
-                        ///< Zero = now.
+                        ///< IO_NOW = now.
     bool value IN
 );
 
@@ -336,7 +344,7 @@ FUNCTION PushNumeric
 (
     string path[MAX_RESOURCE_PATH_LEN] IN,///< Resource path within the client app's namespace.
     double timestamp IN,///< Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
-                        ///< Zero = now.
+                        ///< IO_NOW = now.
     double value IN
 );
 
@@ -350,7 +358,7 @@ FUNCTION PushString
 (
     string path[MAX_RESOURCE_PATH_LEN] IN,///< Resource path within the client app's namespace.
     double timestamp IN,///< Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
-                        ///< Zero = now.
+                        ///< IO_NOW = now.
     string value[MAX_STRING_VALUE_LEN] IN
 );
 
@@ -364,7 +372,7 @@ FUNCTION PushJson
 (
     string path[MAX_RESOURCE_PATH_LEN] IN,///< Resource path within the client app's namespace.
     double timestamp IN,///< Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
-                        ///< Zero = now.
+                        ///< IO_NOW = now.
     string value[MAX_STRING_VALUE_LEN] IN
 );
 

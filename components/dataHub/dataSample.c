@@ -78,7 +78,7 @@ static inline DataSample_t* CreateSample
 {
     DataSample_t* samplePtr = le_mem_ForceAlloc(DataSamplePool);
 
-    if (timestamp == 0.0)
+    if (timestamp == IO_NOW)
     {
         le_clk_Time_t currentTime = le_clk_GetAbsoluteTime();
         timestamp = (((double)(currentTime.usec)) / 1000000) + currentTime.sec;
