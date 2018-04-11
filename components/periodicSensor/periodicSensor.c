@@ -163,7 +163,7 @@ psensor_Ref_t psensor_Create
     sensorPtr->isEnabled = false;
     sensorPtr->period = 0.0;
 
-    sensorPtr->timer = le_timer_Create("name");
+    sensorPtr->timer = le_timer_Create(name);
     le_timer_SetRepeat(sensorPtr->timer, 0); // Repeat an infinite number of times.
     le_timer_SetHandler(sensorPtr->timer, HandleTimerExpiry);
     le_timer_SetContextPtr(sensorPtr->timer, sensorPtr);
