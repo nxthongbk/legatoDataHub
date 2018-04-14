@@ -650,10 +650,10 @@ static void PrintEntry
         Indent(depth);
         PrintDoubleSetting("changeBy", admin_GetChangeBy(obsPath));
         Indent(depth);
-        printf("bufferMaxCount: %u\n", admin_GetBufferMaxCount(obsPath));
+        printf("bufferSize: %u entries\n", admin_GetBufferMaxCount(obsPath));
         Indent(depth);
         uint32_t backupPeriod = admin_GetBufferBackupPeriod(obsPath);
-        printf("bufferBackupPeriod: %u seconds (= %lf minutes) (= %lf hours)\n",
+        printf("backupPeriod: %u seconds (= %lf minutes) (= %lf hours)\n",
                backupPeriod,
                ((double)backupPeriod) / 60,
                ((double)backupPeriod) / 3600);

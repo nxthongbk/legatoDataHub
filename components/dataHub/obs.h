@@ -35,7 +35,18 @@ void obs_Init
 //--------------------------------------------------------------------------------------------------
 res_Resource_t* obs_Create
 (
-    void
+    resTree_EntryRef_t entryRef ///< The resource tree entry to attach this Resource to.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Restore an Observation's data buffer from non-volatile backup, if one exists.
+ */
+//--------------------------------------------------------------------------------------------------
+void obs_RestoreBackup
+(
+    res_Resource_t* resPtr
 );
 
 

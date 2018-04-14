@@ -117,30 +117,6 @@ static void IoResourceDestructor
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Create an Input/Output Resource in a given namespace.
- *
- * @return Pointer to the Resource, or NULL if failed.
- */
-//--------------------------------------------------------------------------------------------------
-static IoResource_t* CreateIo
-(
-    io_DataType_t dataType
-)
-//--------------------------------------------------------------------------------------------------
-{
-    IoResource_t* ioPtr = le_mem_ForceAlloc(IoResourcePool);
-
-    ioPtr->pollHandlerList = LE_DLS_LIST_INIT;
-    ioPtr->pushHandlerList = LE_DLS_LIST_INIT;
-
-    ioPtr->dataType = dataType;
-
-    return ioPtr;
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Initialize the I/O Resource module.
  *
  * @warning This function MUST be called before any others in this module.
@@ -170,11 +146,21 @@ void ioPoint_Init
 //--------------------------------------------------------------------------------------------------
 res_Resource_t* ioPoint_Create
 (
-    io_DataType_t dataType
+    io_DataType_t dataType,
+    resTree_EntryRef_t entryRef ///< The resource tree entry to attach this Resource to.
 )
 //--------------------------------------------------------------------------------------------------
 {
-    return &(CreateIo(dataType)->resource);
+    IoResource_t* ioPtr = le_mem_ForceAlloc(IoResourcePool);
+
+    res_Construct(&ioPtr->resource, entryRef);
+
+    ioPtr->pollHandlerList = LE_DLS_LIST_INIT;
+    ioPtr->pushHandlerList = LE_DLS_LIST_INIT;
+
+    ioPtr->dataType = dataType;
+
+    return &(ioPtr->resource);
 }
 
 

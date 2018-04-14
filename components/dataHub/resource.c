@@ -75,13 +75,15 @@ static bool CanGetThereFromHere
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Initializes Resource object.  (Constructor function for the res_Resource_t base class.)
+ * Constructor for the Resource base class.
+ *
+ * @warning This is only for use by sub-classes (obs.c and ioPoint.c).
  */
 //--------------------------------------------------------------------------------------------------
-static void InitResource
+void res_Construct
 (
     res_Resource_t* resPtr,
-    resTree_EntryRef_t entryRef ///< Reference to the resource tree entry this Resource is in.
+    resTree_EntryRef_t entryRef ///< The resource tree entry to attach this Resource to.
 )
 //--------------------------------------------------------------------------------------------------
 {
@@ -133,9 +135,7 @@ res_Resource_t* res_CreateInput
 )
 //--------------------------------------------------------------------------------------------------
 {
-    res_Resource_t* resPtr = ioPoint_Create(dataType);
-
-    InitResource(resPtr, entryRef);
+    res_Resource_t* resPtr = ioPoint_Create(dataType, entryRef);
 
     resPtr->currentType = dataType;
     SetUnits(resPtr, units);
@@ -159,9 +159,7 @@ res_Resource_t* res_CreateOutput
 )
 //--------------------------------------------------------------------------------------------------
 {
-    res_Resource_t* resPtr = ioPoint_Create(dataType);
-
-    InitResource(resPtr, entryRef);
+    res_Resource_t* resPtr = ioPoint_Create(dataType, entryRef);
 
     resPtr->currentType = dataType;
     SetUnits(resPtr, units);
@@ -183,11 +181,24 @@ res_Resource_t* res_CreateObservation
 )
 //--------------------------------------------------------------------------------------------------
 {
-    res_Resource_t* resPtr = obs_Create();
+    return obs_Create(entryRef);
+}
 
-    InitResource(resPtr, entryRef);
 
-    return resPtr;
+//--------------------------------------------------------------------------------------------------
+/**
+ * Restore an Observation's data buffer from non-volatile backup, if one exists.
+ */
+//--------------------------------------------------------------------------------------------------
+void res_RestoreBackup
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_ASSERT(resTree_GetEntryType(resPtr->entryRef) == ADMIN_ENTRY_TYPE_OBSERVATION);
+
+    obs_RestoreBackup(resPtr);
 }
 
 
@@ -206,7 +217,7 @@ res_Resource_t* res_CreatePlaceholder
 {
     res_Resource_t* resPtr = le_mem_ForceAlloc(PlaceholderPool);
 
-    InitResource(resPtr, entryRef);
+    res_Construct(resPtr, entryRef);
 
     return resPtr;
 }

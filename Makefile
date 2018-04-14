@@ -18,7 +18,7 @@ actuator:
 
 .PHONY: clean
 clean:
-	rm -rf _build* *.update docs
+	rm -rf _build* *.update docs backup
 
 .PHONY: start stop
 start: stop all
@@ -31,6 +31,11 @@ start: stop all
 	sdir bind "<$(USER)>.dhubToolIo" "<$(USER)>.io"
 	sdir bind "<$(USER)>.dhubToolQuery" "<$(USER)>.query"
 	test/supervisor
+	_build_dataHub/localhost/app/dataHub/staging/read-only/bin/dhub set bufferSize count 100
+	_build_dataHub/localhost/app/dataHub/staging/read-only/bin/dhub set backupPeriod count 20
+	_build_dataHub/localhost/app/dataHub/staging/read-only/bin/dhub set source /obs/count /app/sensor/counter/value
+	_build_dataHub/localhost/app/dataHub/staging/read-only/bin/dhub set default /app/sensor/counter/period 4
+	_build_dataHub/localhost/app/dataHub/staging/read-only/bin/dhub set default /app/sensor/counter/enable true
 
 stop:
 	stoplegato

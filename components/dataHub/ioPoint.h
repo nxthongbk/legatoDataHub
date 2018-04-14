@@ -30,7 +30,8 @@ void ioPoint_Init
 //--------------------------------------------------------------------------------------------------
 res_Resource_t* ioPoint_Create
 (
-    io_DataType_t dataType
+    io_DataType_t dataType,
+    resTree_EntryRef_t entryRef ///< The resource tree entry to attach this Resource to.
 );
 
 

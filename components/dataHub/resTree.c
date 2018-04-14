@@ -656,6 +656,7 @@ resTree_EntryRef_t resTree_GetObservation
         {
             res_Resource_t* obsPtr = res_CreateObservation(entryRef);
             ReplaceResource(entryRef, obsPtr, ADMIN_ENTRY_TYPE_OBSERVATION);
+            res_RestoreBackup(obsPtr);
             return entryRef;
         }
         case ADMIN_ENTRY_TYPE_INPUT:

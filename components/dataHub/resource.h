@@ -58,6 +58,37 @@ void res_Init
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Constructor for the Resource base class.
+ *
+ * @warning This is only for use by sub-classes (obs.c and ioPoint.c).
+ */
+//--------------------------------------------------------------------------------------------------
+void res_Construct
+(
+    res_Resource_t* resPtr,
+    resTree_EntryRef_t entryRef ///< The resource tree entry to attach this Resource to.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the resource tree entry for a given resource.
+ *
+ * @return reference to the resource tree entry.
+ */
+//--------------------------------------------------------------------------------------------------
+static inline resTree_EntryRef_t res_GetResTreeEntry
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return resPtr->entryRef;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Create an Input resource object.
  *
  * @return Ptr to the object.
@@ -96,6 +127,17 @@ res_Resource_t* res_CreateOutput
 res_Resource_t* res_CreateObservation
 (
     resTree_EntryRef_t entryRef ///< The entry that this resource will be attached to.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Restore an Observation's data buffer from non-volatile backup, if one exists.
+ */
+//--------------------------------------------------------------------------------------------------
+void res_RestoreBackup
+(
+    res_Resource_t* resPtr
 );
 
 
