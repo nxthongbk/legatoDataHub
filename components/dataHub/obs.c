@@ -35,8 +35,11 @@
 #include "resource.h"
 #include "resTree.h"
 
-
-#define BACKUP_DIR "backup/"
+#ifdef LEGATO_EMBEDDED
+ #define BACKUP_DIR "/data/dataHubBackup/"
+#else
+ #define BACKUP_DIR "backup/"
+#endif
 #define BACKUP_SUFFIX ".bak"
 #define MAX_BACKUP_FILE_PATH_BYTES (  sizeof(BACKUP_DIR) \
                                     + IO_MAX_RESOURCE_PATH_LEN \
@@ -106,6 +109,70 @@ static uint32_t GetRelativeTimeMs
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get the file system path to use for the backup file for a given Observation's data sample buffer.
+ *
+ * @return LE_OK if successful.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t GetBackupFilePath
+(
+    char* pathBuffPtr,  ///< [OUT] Ptr to where the path will be written.
+    size_t pathBuffSize,    ///< Size of the buffer in bytes.
+    Observation_t* obsPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    size_t len;
+    LE_ASSERT(LE_OK == le_utf8_Copy(pathBuffPtr, BACKUP_DIR, pathBuffSize, &len));
+
+    pathBuffPtr += len;
+    pathBuffSize -= len;
+
+    resTree_EntryRef_t obsNamespace = resTree_FindEntry(resTree_GetRoot(), "obs");
+    LE_ASSERT(obsNamespace != NULL);
+
+    ssize_t result = resTree_GetPath(pathBuffPtr,
+                                     pathBuffSize,
+                                     obsNamespace,
+                                     res_GetResTreeEntry(&obsPtr->resource));
+    if (result <= 0)
+    {
+        LE_CRIT("Failed to fetch Observation path for '%s' (%s).",
+                resTree_GetEntryName(res_GetResTreeEntry(&obsPtr->resource)),
+                LE_RESULT_TXT(result));
+
+        return result;
+    }
+
+    pathBuffPtr += result;
+    pathBuffSize -= result;
+
+    return le_utf8_Copy(pathBuffPtr, BACKUP_SUFFIX, pathBuffSize, NULL);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete the observation's buffer backup file, if it exists.
+ */
+//--------------------------------------------------------------------------------------------------
+static void DeleteBackup
+(
+    Observation_t* obsPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    char path[IO_MAX_RESOURCE_PATH_LEN];
+    le_result_t result = GetBackupFilePath(path, sizeof(path), obsPtr);
+    if (result == LE_OK)
+    {
+        unlink(path);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Observation destructor.
  */
 //--------------------------------------------------------------------------------------------------
@@ -129,7 +196,11 @@ static void ObservationDestructor
     obsPtr->count = 0;
     obsPtr->maxCount = 0;
 
-    // TODO: Delete the buffer backup file if backups are enabled.
+    // If the observation had backups enabled, delete the backup file.
+    if (obsPtr->backupPeriod > 0)
+    {
+        DeleteBackup(obsPtr);
+    }
 
     res_Destruct(&obsPtr->resource);
 }
@@ -196,50 +267,6 @@ static void TruncateBuffer
 
         (obsPtr->count)--;
     }
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get the file system path to use for the backup file for a given Observation's data sample buffer.
- *
- * @return LE_OK if successful.
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t GetBackupFilePath
-(
-    char* pathBuffPtr,  ///< [OUT] Ptr to where the path will be written.
-    size_t pathBuffSize,    ///< Size of the buffer in bytes.
-    Observation_t* obsPtr
-)
-//--------------------------------------------------------------------------------------------------
-{
-    size_t len;
-    LE_ASSERT(LE_OK == le_utf8_Copy(pathBuffPtr, BACKUP_DIR, pathBuffSize, &len));
-
-    pathBuffPtr += len;
-    pathBuffSize -= len;
-
-    resTree_EntryRef_t obsNamespace = resTree_FindEntry(resTree_GetRoot(), "obs");
-    LE_ASSERT(obsNamespace != NULL);
-
-    ssize_t result = resTree_GetPath(pathBuffPtr,
-                                     pathBuffSize,
-                                     obsNamespace,
-                                     res_GetResTreeEntry(&obsPtr->resource));
-    if (result <= 0)
-    {
-        LE_CRIT("Failed to fetch Observation path for '%s' (%s).",
-                resTree_GetEntryName(res_GetResTreeEntry(&obsPtr->resource)),
-                LE_RESULT_TXT(result));
-
-        return result;
-    }
-
-    pathBuffPtr += result;
-    pathBuffSize -= result;
-
-    return le_utf8_Copy(pathBuffPtr, BACKUP_SUFFIX, pathBuffSize, NULL);
 }
 
 
@@ -742,11 +769,7 @@ static void DisableBackups
 
     obsPtr->lastBackupTime = 0;
 
-    char path[MAX_BACKUP_FILE_PATH_BYTES];
-    if (GetBackupFilePath(path, sizeof(path), obsPtr) == LE_OK)
-    {
-        LE_INFO("TODO: DELETE BACKUP at %s", path);
-    }
+    DeleteBackup(obsPtr);
 }
 
 
@@ -844,7 +867,17 @@ void obs_RestoreBackup
 {
     Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
 
-    LE_DEBUG("Restoring backup...");
+    // If there's no backup directory yet, then we know there are no backups, so don't
+    // try opening one (which would result in an error message in the logs because the lock file
+    // can't be created).
+    struct stat st = {0};
+    if (stat(BACKUP_DIR, &st) == -1)
+    {
+        LE_INFO("Backup directory '" BACKUP_DIR "' not found. (%m)");
+        return;
+    }
+
+    LE_INFO("Restoring backup...");
 
     char path[MAX_BACKUP_FILE_PATH_BYTES];
     if (GetBackupFilePath(path, sizeof(path), obsPtr) != LE_OK)

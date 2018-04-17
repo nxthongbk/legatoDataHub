@@ -13,6 +13,10 @@
  */
 //--------------------------------------------------------------------------------------------------
 
+// Sadly, we have to run this app outside a sandbox for now, because it needs to access
+// a part of the file system that will not get deleted by the framework when the app is updated.
+sandboxed: false
+
 executables:
 {
     hubd = ( components/dataHub )
