@@ -225,6 +225,111 @@ bool ioPoint_ShouldAccept
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Call a given push handler, passing it a given data sample.
+ */
+//--------------------------------------------------------------------------------------------------
+static void CallPushHandler
+(
+    Handler_t* handlerPtr,
+    io_DataType_t dataType,     ///< Data type of the data sample.
+    dataSample_Ref_t sampleRef  ///< Data sample.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (handlerPtr->dataType == dataType)
+    {
+        double timestamp = dataSample_GetTimestamp(sampleRef);
+
+        switch (dataType)
+        {
+            case IO_DATA_TYPE_TRIGGER:
+            {
+                io_TriggerPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
+                callbackPtr(timestamp, handlerPtr->contextPtr);
+                break;
+            }
+
+            case IO_DATA_TYPE_BOOLEAN:
+            {
+                io_BooleanPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
+                callbackPtr(timestamp,
+                            dataSample_GetBoolean(sampleRef),
+                            handlerPtr->contextPtr);
+                break;
+            }
+
+            case IO_DATA_TYPE_NUMERIC:
+            {
+                io_NumericPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
+                callbackPtr(timestamp,
+                            dataSample_GetNumeric(sampleRef),
+                            handlerPtr->contextPtr);
+                break;
+            }
+
+            case IO_DATA_TYPE_STRING:
+            {
+                io_StringPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
+                callbackPtr(timestamp,
+                            dataSample_GetString(sampleRef),
+                            handlerPtr->contextPtr);
+                break;
+            }
+
+            case IO_DATA_TYPE_JSON:
+            {
+                io_JsonPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
+                callbackPtr(timestamp,
+                            dataSample_GetJson(sampleRef),
+                            handlerPtr->contextPtr);
+                break;
+            }
+        }
+    }
+    else if (handlerPtr->dataType == IO_DATA_TYPE_STRING)
+    {
+        char value[IO_MAX_STRING_VALUE_LEN];
+        if (LE_OK != dataSample_ConvertToString(sampleRef,
+                                                dataType,
+                                                value,
+                                                sizeof(value)) )
+        {
+            LE_ERROR("Conversion to string would result in string buffer overflow.");
+        }
+        else
+        {
+            double timestamp = dataSample_GetTimestamp(sampleRef);
+
+            io_StringPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
+            callbackPtr(timestamp,
+                        value,
+                        handlerPtr->contextPtr);
+        }
+    }
+    else if (handlerPtr->dataType == IO_DATA_TYPE_JSON)
+    {
+        char value[IO_MAX_STRING_VALUE_LEN];
+        if (LE_OK != dataSample_ConvertToJson(sampleRef,
+                                              dataType,
+                                              value,
+                                              sizeof(value)) )
+        {
+            LE_ERROR("Conversion to JSON would result in string buffer overflow.");
+        }
+        else
+        {
+            double timestamp = dataSample_GetTimestamp(sampleRef);
+
+            io_JsonPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
+            callbackPtr(timestamp,
+                        value,
+                        handlerPtr->contextPtr);
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Add a Push Handler.
  *
  * @return Reference to the handler added.
@@ -254,6 +359,13 @@ hub_HandlerRef_t ioPoint_AddPushHandler
     handlerPtr->contextPtr = contextPtr;
 
     le_dls_Queue(&ioPtr->pushHandlerList, &handlerPtr->link);
+
+    // If the resource has a current value call the push handler now, iff it's a data type match.
+    dataSample_Ref_t sampleRef = res_GetCurrentValue(&ioPtr->resource);
+    if (sampleRef != NULL)
+    {
+        CallPushHandler(handlerPtr, res_GetDataType(resPtr), sampleRef);
+    }
 
     return (hub_HandlerRef_t)(handlerPtr->safeRef);
 }
@@ -306,96 +418,7 @@ void ioPoint_ProcessAccepted
     {
         Handler_t* handlerPtr = CONTAINER_OF(linkPtr, Handler_t, link);
 
-        if (handlerPtr->dataType == dataType)
-        {
-            double timestamp = dataSample_GetTimestamp(sampleRef);
-
-            switch (dataType)
-            {
-                case IO_DATA_TYPE_TRIGGER:
-                {
-                    io_TriggerPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
-                    callbackPtr(timestamp, handlerPtr->contextPtr);
-                    break;
-                }
-
-                case IO_DATA_TYPE_BOOLEAN:
-                {
-                    io_BooleanPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
-                    callbackPtr(timestamp,
-                                dataSample_GetBoolean(sampleRef),
-                                handlerPtr->contextPtr);
-                    break;
-                }
-
-                case IO_DATA_TYPE_NUMERIC:
-                {
-                    io_NumericPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
-                    callbackPtr(timestamp,
-                                dataSample_GetNumeric(sampleRef),
-                                handlerPtr->contextPtr);
-                    break;
-                }
-
-                case IO_DATA_TYPE_STRING:
-                {
-                    io_StringPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
-                    callbackPtr(timestamp,
-                                dataSample_GetString(sampleRef),
-                                handlerPtr->contextPtr);
-                    break;
-                }
-
-                case IO_DATA_TYPE_JSON:
-                {
-                    io_JsonPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
-                    callbackPtr(timestamp,
-                                dataSample_GetJson(sampleRef),
-                                handlerPtr->contextPtr);
-                    break;
-                }
-            }
-        }
-        else if (handlerPtr->dataType == IO_DATA_TYPE_STRING)
-        {
-            char value[IO_MAX_STRING_VALUE_LEN];
-            if (LE_OK != dataSample_ConvertToString(sampleRef,
-                                                    res_GetDataType(resPtr),
-                                                    value,
-                                                    sizeof(value)) )
-            {
-                LE_ERROR("Conversion to string would result in string buffer overflow.");
-            }
-            else
-            {
-                double timestamp = dataSample_GetTimestamp(sampleRef);
-
-                io_StringPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
-                callbackPtr(timestamp,
-                            value,
-                            handlerPtr->contextPtr);
-            }
-        }
-        else if (handlerPtr->dataType == IO_DATA_TYPE_JSON)
-        {
-            char value[IO_MAX_STRING_VALUE_LEN];
-            if (LE_OK != dataSample_ConvertToJson(sampleRef,
-                                                  res_GetDataType(resPtr),
-                                                  value,
-                                                  sizeof(value)) )
-            {
-                LE_ERROR("Conversion to JSON would result in string buffer overflow.");
-            }
-            else
-            {
-                double timestamp = dataSample_GetTimestamp(sampleRef);
-
-                io_JsonPushHandlerFunc_t callbackPtr = handlerPtr->callbackPtr;
-                callbackPtr(timestamp,
-                            value,
-                            handlerPtr->contextPtr);
-            }
-        }
+        CallPushHandler(handlerPtr, dataType, sampleRef);
 
         linkPtr = le_dls_PeekNext(&ioPtr->pushHandlerList, linkPtr);
     }
