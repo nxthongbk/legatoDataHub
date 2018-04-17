@@ -79,6 +79,13 @@ static resTree_EntryRef_t FindResource
         entryRef = resTree_FindEntry(entryRef, path);
     }
 
+    admin_EntryType_t entryType = resTree_GetEntryType(entryRef);
+    if ((entryType != ADMIN_ENTRY_TYPE_INPUT) && (entryType != ADMIN_ENTRY_TYPE_OUTPUT))
+    {
+        LE_DEBUG("'%s' is not an Input or an Output.", path);
+        return NULL;
+    }
+
     return entryRef;
 }
 
@@ -456,6 +463,15 @@ static hub_HandlerRef_t AddPushHandler
         return NULL;
     }
 
+    admin_EntryType_t entryType = resTree_GetEntryType(resRef);
+    if ((entryType != ADMIN_ENTRY_TYPE_INPUT) && (entryType != ADMIN_ENTRY_TYPE_OUTPUT))
+    {
+        LE_KILL_CLIENT("Attempt to register Push handler before creating resource '/app/%s/%s'.",
+                       resTree_GetEntryName(nsRef),
+                       path);
+        return NULL;
+    }
+
     return resTree_AddPushHandler(resRef, dataType, callbackPtr, contextPtr);
 }
 
@@ -678,6 +694,10 @@ void io_SetBooleanDefault
     {
         LE_KILL_CLIENT("Attempt to set default value of non-existent resource '%s'.", path);
     }
+    else if (resTree_GetDataType(resRef) != IO_DATA_TYPE_BOOLEAN)
+    {
+        LE_KILL_CLIENT("Attempt to set default value to wrong type for resource '%s'.", path);
+    }
     else if (!resTree_HasDefault(resRef))
     {
         // Create a Data Sample object for this new sample.
@@ -708,6 +728,10 @@ void io_SetNumericDefault
     if (resRef == NULL)
     {
         LE_KILL_CLIENT("Attempt to set default value of non-existent resource '%s'.", path);
+    }
+    else if (resTree_GetDataType(resRef) != IO_DATA_TYPE_NUMERIC)
+    {
+        LE_KILL_CLIENT("Attempt to set default value to wrong type for resource '%s'.", path);
     }
     else if (!resTree_HasDefault(resRef))
     {
@@ -740,6 +764,10 @@ void io_SetStringDefault
     {
         LE_KILL_CLIENT("Attempt to set default value of non-existent resource '%s'.", path);
     }
+    else if (resTree_GetDataType(resRef) != IO_DATA_TYPE_STRING)
+    {
+        LE_KILL_CLIENT("Attempt to set default value to wrong type for resource '%s'.", path);
+    }
     else if (!resTree_HasDefault(resRef))
     {
         // Create a Data Sample object for this new sample.
@@ -770,6 +798,10 @@ void io_SetJsonDefault
     if (resRef == NULL)
     {
         LE_KILL_CLIENT("Attempt to set default value of non-existent resource '%s'.", path);
+    }
+    else if (resTree_GetDataType(resRef) != IO_DATA_TYPE_JSON)
+    {
+        LE_KILL_CLIENT("Attempt to set default value to wrong type for resource '%s'.", path);
     }
     else if (!resTree_HasDefault(resRef))
     {

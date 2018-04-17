@@ -161,6 +161,14 @@
  * - io_PushString()
  * - io_PushJson()
  *
+ * For example,
+ *
+ * @code
+ *
+ * io_PushNumeric(INPUT_NAME, IO_NOW, inputValue);
+ *
+ * @endcode
+ *
  *
  * @section c_dataHubIo_ReceivingOutput Receiving Output From the Data Hub
  *
@@ -171,6 +179,25 @@
  * - io_AddNumericPushHandler() (optionally remove using io_RemoveNumericPushHandler())
  * - io_AddStringPushHandler() (optionally remove using io_RemoveStringPushHandler())
  * - io_AddJsonPushHandler() (optionally remove using io_RemoveJsonPushHandler())
+ *
+ * For example,
+ *
+ * @code
+ *
+ * // This is my enable/disable control.
+ * result = io_CreateOutput(ENABLE_NAME, IO_DATA_TYPE_BOOLEAN, "");
+ * LE_ASSERT(result == LE_OK);
+ *
+ * // Register for notification of updates to my enable/disable control.
+ * // My function EnableUpdateHandler() will be called when updates arrive for my enable/disable
+ * // control.
+ * io_AddBooleanPushHandler(ENABLE_NAME, EnableUpdateHandler, NULL);
+ *
+ * @endcode
+ *
+ * When a push handler is registered on a resource that already has a value, the push handler
+ * will be called to deliver that current value.  If the resource doesn't have a current value yet,
+ * then the push handler will not be called until the resource receives its first value.
  *
  * @note Deleting an Output will automatically remove all Push handler call-backs that have been
  *       registered with that Output.
@@ -185,6 +212,50 @@
  *
  * @note It's possible for a resource to not have any value. This will be indicated by a return
  *       code.
+ *
+ * @code
+ *
+ * double timestamp;
+ * bool value;
+ *
+ * le_result_t result = io_GetBoolean(ENABLE_NAME, &timestamp, &value);
+ *
+ * if (result == LE_OK)
+ * {
+ *     printf("I'm currently %s.\n", value ? "enabled" : "disabled");
+ * }
+ * else
+ * {
+ *     LE_CRIT("Failed to fetch value of " ENABLE_NAME " (%s).", LE_RESULT_TXT(result));
+ * }
+ *
+ * @endcode
+ *
+ * @note If you need to ensure that your resource always has a current value, you can set its
+ *       default value right after you create it.
+ *
+ *
+ * @section c_dataHubIo_DefaultValues Setting Default Values
+ *
+ * It's possible to tell the Data Hub that your Input or Output has a default value.
+ * if the resource doesn't already have a default value, the following functions will set it:
+ * - io_SetBooleanDefault()
+ * - io_SetNumericDefault()
+ * - io_SetStringDefault()
+ * - io_SetJsonDefault()
+ *
+ * For example,
+ *
+ * @code
+ *
+ * // This is my enable/disable control.
+ * result = io_CreateOutput(ENABLE_NAME, IO_DATA_TYPE_BOOLEAN, "");
+ * LE_ASSERT(result == LE_OK);
+ *
+ * // The default is to be disabled.
+ * io_SetBooleanDefault(ENABLE_NAME, false);
+ *
+ * @endcode
  *
  *
  * @section c_dataHubIo_BeingPolled Being Polled by the Data Hub
