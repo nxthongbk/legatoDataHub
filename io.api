@@ -500,6 +500,62 @@ EVENT JsonPush
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Set a Boolean type value as the default value of a given resource.
+ *
+ * @note This will be ignored if the resource already has a default value.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION SetBooleanDefault
+(
+    string path[MAX_RESOURCE_PATH_LEN] IN,///< Resource path within the client app's namespace.
+    bool value IN
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set a numeric type value as the default value of a given resource.
+ *
+ * @note This will be ignored if the resource already has a default value.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION SetNumericDefault
+(
+    string path[MAX_RESOURCE_PATH_LEN] IN,///< Resource path within the client app's namespace.
+    double value IN
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set a string type value as the default value of a given resource.
+ *
+ * @note This will be ignored if the resource already has a default value.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION SetStringDefault
+(
+    string path[MAX_RESOURCE_PATH_LEN] IN,///< Resource path within the client app's namespace.
+    string value[MAX_STRING_VALUE_LEN] IN
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set a JSON type value as the default value of a given resource.
+ *
+ * @note This will be ignored if the resource already has a default value.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION SetJsonDefault
+(
+    string path[MAX_RESOURCE_PATH_LEN] IN,///< Resource path within the client app's namespace.
+    string value[MAX_STRING_VALUE_LEN] IN
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Fetch the timestamp of the current value of an Input or Output resource with any data type.
  *
  * @return

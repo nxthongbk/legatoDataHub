@@ -140,6 +140,9 @@ COMPONENT_INIT
     result = io_CreateOutput(ENABLE_NAME, IO_DATA_TYPE_BOOLEAN, "");
     LE_ASSERT(result == LE_OK);
 
+    // The default is to be disabled.
+    io_SetBooleanDefault(ENABLE_NAME, false);
+
     // Register for notification of updates to our enable/disable control.
     io_AddBooleanPushHandler(ENABLE_NAME, EnableUpdateHandler, NULL);
 

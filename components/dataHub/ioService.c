@@ -659,6 +659,130 @@ void io_RemoveJsonPushHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Set a Boolean type value as the default value of a given resource.
+ *
+ * @note This will be ignored if the resource already has a default value.
+ */
+//--------------------------------------------------------------------------------------------------
+void io_SetBooleanDefault
+(
+    const char* LE_NONNULL path,
+        ///< [IN] Resource path within the client app's namespace.
+    bool value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resRef = FindResource(path);
+    if (resRef == NULL)
+    {
+        LE_KILL_CLIENT("Attempt to set default value of non-existent resource '%s'.", path);
+    }
+    else if (!resTree_HasDefault(resRef))
+    {
+        // Create a Data Sample object for this new sample.
+        dataSample_Ref_t sampleRef = dataSample_CreateBoolean(0.0, value);
+
+        resTree_SetDefault(resRef, IO_DATA_TYPE_BOOLEAN, sampleRef);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set a numeric type value as the default value of a given resource.
+ *
+ * @note This will be ignored if the resource already has a default value.
+ */
+//--------------------------------------------------------------------------------------------------
+void io_SetNumericDefault
+(
+    const char* LE_NONNULL path,
+        ///< [IN] Resource path within the client app's namespace.
+    double value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resRef = FindResource(path);
+    if (resRef == NULL)
+    {
+        LE_KILL_CLIENT("Attempt to set default value of non-existent resource '%s'.", path);
+    }
+    else if (!resTree_HasDefault(resRef))
+    {
+        // Create a Data Sample object for this new sample.
+        dataSample_Ref_t sampleRef = dataSample_CreateNumeric(0.0, value);
+
+        resTree_SetDefault(resRef, IO_DATA_TYPE_NUMERIC, sampleRef);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set a string type value as the default value of a given resource.
+ *
+ * @note This will be ignored if the resource already has a default value.
+ */
+//--------------------------------------------------------------------------------------------------
+void io_SetStringDefault
+(
+    const char* LE_NONNULL path,
+        ///< [IN] Resource path within the client app's namespace.
+    const char* LE_NONNULL value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resRef = FindResource(path);
+    if (resRef == NULL)
+    {
+        LE_KILL_CLIENT("Attempt to set default value of non-existent resource '%s'.", path);
+    }
+    else if (!resTree_HasDefault(resRef))
+    {
+        // Create a Data Sample object for this new sample.
+        dataSample_Ref_t sampleRef = dataSample_CreateString(0.0, value);
+
+        resTree_SetDefault(resRef, IO_DATA_TYPE_STRING, sampleRef);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set a JSON type value as the default value of a given resource.
+ *
+ * @note This will be ignored if the resource already has a default value.
+ */
+//--------------------------------------------------------------------------------------------------
+void io_SetJsonDefault
+(
+    const char* LE_NONNULL path,
+        ///< [IN] Resource path within the client app's namespace.
+    const char* LE_NONNULL value
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resRef = FindResource(path);
+    if (resRef == NULL)
+    {
+        LE_KILL_CLIENT("Attempt to set default value of non-existent resource '%s'.", path);
+    }
+    else if (!resTree_HasDefault(resRef))
+    {
+        // Create a Data Sample object for this new sample.
+        dataSample_Ref_t sampleRef = dataSample_CreateJson(0.0, value);
+
+        resTree_SetDefault(resRef, IO_DATA_TYPE_JSON, sampleRef);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get the current value of a given resource, with type check.
  *
  * @return A reference to the data sample, or NULL if not available.
