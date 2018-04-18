@@ -608,6 +608,31 @@ uint32_t resTree_GetBufferBackupPeriod
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Mark an Output resource "optional".  (By default, they are marked "mandatory".)
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_MarkOptional
+(
+    resTree_EntryRef_t resEntry
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if a given resource is a mandatory output.  If so, it means that this is an output resource
+ * that must have a value before the related app function will begin working.
+ *
+ * @return true if a mandatory output, false if it's an optional output or not an output at all.
+ */
+//--------------------------------------------------------------------------------------------------
+bool resTree_IsMandatory
+(
+    resTree_EntryRef_t resEntry
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set the default value of a resource.
  *
  * @note Default will be discarded by an Input or Output resource if the default's data type

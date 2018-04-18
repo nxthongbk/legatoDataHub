@@ -396,7 +396,14 @@ static void PrintCurrentValue
     }
     else if (result == LE_UNAVAILABLE)
     {
-        putchar('\n');
+        if (admin_IsMandatory(path))
+        {
+            printf(" <-- WARNING: unsatisfied mandatory output\n");
+        }
+        else
+        {
+            putchar('\n');
+        }
     }
     else
     {
@@ -607,7 +614,7 @@ static void PrintEntry
         if (admin_HasDefault(path))
         {
             Indent(depth);
-            printf("Default value = ");
+            printf("default = ");
             PrintDefault(path);
             putchar('\n');
         }

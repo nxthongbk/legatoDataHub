@@ -23,12 +23,26 @@ void ioPoint_Init
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Create an I/O Point Resource.
+ * Create an Input Resource.
  *
- * @return Pointer to the Resource, or NULL if failed (client killed).
+ * @return Pointer to the Resource.
  */
 //--------------------------------------------------------------------------------------------------
-res_Resource_t* ioPoint_Create
+res_Resource_t* ioPoint_CreateInput
+(
+    io_DataType_t dataType,
+    resTree_EntryRef_t entryRef ///< The resource tree entry to attach this Resource to.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Create an Output Resource.
+ *
+ * @return Pointer to the Resource.
+ */
+//--------------------------------------------------------------------------------------------------
+res_Resource_t* ioPoint_CreateOutput
 (
     io_DataType_t dataType,
     resTree_EntryRef_t entryRef ///< The resource tree entry to attach this Resource to.
@@ -99,6 +113,31 @@ void ioPoint_ProcessAccepted
     res_Resource_t* resPtr,
     io_DataType_t dataType,     ///< Data type of the data sample.
     dataSample_Ref_t sampleRef  ///< Data sample.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Mark an Output resource "optional".  (By default, they are marked "mandatory".)
+ */
+//--------------------------------------------------------------------------------------------------
+void ioPoint_MarkOptional
+(
+    res_Resource_t* resPtr
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if a given resource is a mandatory output.  If so, it means that this is an output resource
+ * that must have a value before the related app function will begin working.
+ *
+ * @return true if a mandatory output, false if it's an optional output or not an output at all.
+ */
+//--------------------------------------------------------------------------------------------------
+bool ioPoint_IsMandatory
+(
+    res_Resource_t* resPtr
 );
 
 

@@ -285,6 +285,21 @@
  * See also @ref c_dataHubAdmin_CleanUp.
  *
  *
+ * @subsection c_dataHubAdmin_Mandatory Mandatory Outputs
+ *
+ * It's possible for a connected app (e.g., sensor or actuator) to have configuration settings
+ * that are considered mandatory to the operation of that app.  For example, a sensor may not
+ * be able to function unless it has received calibration data settings, or even just a sampling
+ * period setting.
+ *
+ * The function admin_IsMandatory() can be called to check whether a given Output resource is
+ * "mandatory", meaning that it must have a value before the connected app function will work.
+ *
+ * @code
+ * printf("Resource '%s' is%s mandatory.\n", admin_IsMandatory(resPath) ? "" : " not");
+ * @endcode
+ *
+ *
  * @section c_dataHubAdmin_Discovery Discovery
  *
  * To support discovery of what is currently available and/or configured in the resource tree,
@@ -318,11 +333,13 @@
  *  - admin_GetBufferMaxCount()
  *  - admin_GetBufferBackupPeriod()
  *
+ * Inspection functions that can be used with Outputs only are:
+ *  - admin_IsMandatory()
+ *
  *
  * @section c_dataHubAdmin_CleanUp Cleaning Up Resources
  *
- * With the exception of Overrides, resource tree entries are generally removed from the
- * resource tree automatically whenever there are no longer any references to them:
+ * Resource tree entries are cleaned up as follows:
  *
  *  - Input or Output resources are deleted when their app disconnects or calls io_DeleteResource()
  *    on them AND the administrator has removed any settings that it has applied to that I/O
@@ -333,11 +350,11 @@
  *  - Placeholders are deleted when all their settings (Defaults, Overrides and Sources) have been
  *    removed by the administrator.
  *
- * The one exception to this rule is for Observations, which must be explicitly deleted by the
- * administrator (by calling admin_DeleteObs()).
+ *  - Observations must be explicitly deleted by the administrator (by calling admin_DeleteObs()).
  *
- * The non-volatile buffer backup files for a given Observation is deleted when admin_EndUpdate()
- * is called while there are no Observations attached to them.
+ *  - The non-volatile buffer backup file for a given Observation is deleted when admin_EndUpdate()
+ *    is called while there is no Observation attached to it, or when buffering is disabled backups
+ *    are disabled on a given Observation.
  *
  *
  * @section c_dataHubAdmin_MultiClient Multiple Clients
@@ -982,6 +999,20 @@ FUNCTION le_result_t GetNextSibling
  */
 //--------------------------------------------------------------------------------------------------
 FUNCTION EntryType GetEntryType
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN ///< Absolute path of the resource.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if a given resource is a mandatory output.  If so, it means that this is an output resource
+ * that must have a value before the related app function will begin working.
+ *
+ * @return true if a mandatory output, false if it's an optional output or not an output at all.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION bool IsMandatory
 (
     string path[io.MAX_RESOURCE_PATH_LEN] IN ///< Absolute path of the resource.
 );

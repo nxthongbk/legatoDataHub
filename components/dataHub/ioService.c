@@ -675,6 +675,34 @@ void io_RemoveJsonPushHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Mark an Output resource "optional".  (By default, they are marked "mandatory".)
+ */
+//--------------------------------------------------------------------------------------------------
+void io_MarkOptional
+(
+    const char* path
+        ///< [IN] Resource path within the client app's namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resRef = FindResource(path);
+    if (resRef == NULL)
+    {
+        LE_KILL_CLIENT("Attempt to mark non-existent resource optional at '%s'.", path);
+    }
+    else if (resTree_GetEntryType(resRef) != ADMIN_ENTRY_TYPE_OUTPUT)
+    {
+        LE_KILL_CLIENT("Attempt to mark non-Output resource optional at '%s'.", path);
+    }
+    else
+    {
+        resTree_MarkOptional(resRef);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set a Boolean type value as the default value of a given resource.
  *
  * @note This will be ignored if the resource already has a default value.
@@ -682,7 +710,7 @@ void io_RemoveJsonPushHandler
 //--------------------------------------------------------------------------------------------------
 void io_SetBooleanDefault
 (
-    const char* LE_NONNULL path,
+    const char* path,
         ///< [IN] Resource path within the client app's namespace.
     bool value
         ///< [IN]
@@ -717,7 +745,7 @@ void io_SetBooleanDefault
 //--------------------------------------------------------------------------------------------------
 void io_SetNumericDefault
 (
-    const char* LE_NONNULL path,
+    const char* path,
         ///< [IN] Resource path within the client app's namespace.
     double value
         ///< [IN]
@@ -752,9 +780,9 @@ void io_SetNumericDefault
 //--------------------------------------------------------------------------------------------------
 void io_SetStringDefault
 (
-    const char* LE_NONNULL path,
+    const char* path,
         ///< [IN] Resource path within the client app's namespace.
-    const char* LE_NONNULL value
+    const char* value
         ///< [IN]
 )
 //--------------------------------------------------------------------------------------------------
@@ -787,9 +815,9 @@ void io_SetStringDefault
 //--------------------------------------------------------------------------------------------------
 void io_SetJsonDefault
 (
-    const char* LE_NONNULL path,
+    const char* path,
         ///< [IN] Resource path within the client app's namespace.
-    const char* LE_NONNULL value
+    const char* value
         ///< [IN]
 )
 //--------------------------------------------------------------------------------------------------

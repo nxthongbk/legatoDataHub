@@ -508,6 +508,31 @@ uint32_t res_GetBufferBackupPeriod
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Mark an Output resource "optional".  (By default, they are marked "mandatory".)
+ */
+//--------------------------------------------------------------------------------------------------
+void res_MarkOptional
+(
+    res_Resource_t* resPtr
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if a given resource is a mandatory output.  If so, it means that this is an output resource
+ * that must have a value before the related app function will begin working.
+ *
+ * @return true if a mandatory output, false if it's an optional output or not an output at all.
+ */
+//--------------------------------------------------------------------------------------------------
+bool res_IsMandatory
+(
+    res_Resource_t* resPtr
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set the default value of a resource.
  *
  * Will be discarded if setting the default value on an Input or Output that doesn't have the

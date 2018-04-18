@@ -135,7 +135,7 @@ res_Resource_t* res_CreateInput
 )
 //--------------------------------------------------------------------------------------------------
 {
-    res_Resource_t* resPtr = ioPoint_Create(dataType, entryRef);
+    res_Resource_t* resPtr = ioPoint_CreateInput(dataType, entryRef);
 
     resPtr->currentType = dataType;
     SetUnits(resPtr, units);
@@ -159,7 +159,7 @@ res_Resource_t* res_CreateOutput
 )
 //--------------------------------------------------------------------------------------------------
 {
-    res_Resource_t* resPtr = ioPoint_Create(dataType, entryRef);
+    res_Resource_t* resPtr = ioPoint_CreateOutput(dataType, entryRef);
 
     resPtr->currentType = dataType;
     SetUnits(resPtr, units);
@@ -957,6 +957,39 @@ uint32_t res_GetBufferBackupPeriod
 //--------------------------------------------------------------------------------------------------
 {
     return obs_GetBufferBackupPeriod(resPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Mark an Output resource "optional".  (By default, they are marked "mandatory".)
+ */
+//--------------------------------------------------------------------------------------------------
+void res_MarkOptional
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    ioPoint_MarkOptional(resPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if a given resource is a mandatory output.  If so, it means that this is an output resource
+ * that must have a value before the related app function will begin working.
+ *
+ * @return true if a mandatory output, false if it's an optional output or not an output at all.
+ */
+//--------------------------------------------------------------------------------------------------
+bool res_IsMandatory
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return ioPoint_IsMandatory(resPtr);
 }
 
 

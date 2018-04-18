@@ -235,6 +235,26 @@
  *       default value right after you create it.
  *
  *
+ * @subsection c_dataHubIo_Mandatory Mandatory Outputs
+ *
+ * It's possible for a connected app (e.g., sensor or actuator) to have configuration settings
+ * that are considered mandatory to the operation of that app.  For example, a sensor may not
+ * be able to function unless it has received calibration data settings, or even just a sampling
+ * period setting.
+ *
+ * By default, all Outputs are considered mandatory, but an Output can be marked "optional"
+ * by calling io_MarkOptional().
+ *
+ * @code
+ * io_MarkOptional("temperature/offset");
+ * @endcode
+ *
+ * Alternatively, you can set a default value for your mandatory output.
+ *
+ * Administrative apps can see which resources are mandatory and which are optional, so warnings
+ * or hints can be displayed to developers or maintainers if mandatory Outputs are not given values.
+ *
+ *
  * @section c_dataHubIo_DefaultValues Setting Default Values
  *
  * It's possible to tell the Data Hub that your Input or Output has a default value.
@@ -256,6 +276,9 @@
  * io_SetBooleanDefault(ENABLE_NAME, false);
  *
  * @endcode
+ *
+ * If the resource already has a default value, then calls to these functions will be quietly
+ * ignored.
  *
  *
  * @section c_dataHubIo_BeingPolled Being Polled by the Data Hub
@@ -566,6 +589,17 @@ EVENT JsonPush
 (
     string path[MAX_RESOURCE_PATH_LEN] IN,///< Resource path within the client app's namespace.
     JsonPushHandler callback
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Mark an Output resource "optional".  (By default, they are marked "mandatory".)
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION MarkOptional
+(
+    string path[MAX_RESOURCE_PATH_LEN] IN ///< Resource path within the client app's namespace.
 );
 
 

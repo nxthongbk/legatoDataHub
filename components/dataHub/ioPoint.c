@@ -22,6 +22,7 @@ typedef struct ioResource
     io_DataType_t dataType;     ///< Data type of this resource.
     le_dls_List_t pollHandlerList;  ///< List of Poll Handler callbacks the client app registered.
     le_dls_List_t pushHandlerList;  ///< List of Push Handler callbacks the client app registered.
+    bool isMandatory;   ///< true = this is a mandatory output; false otherwise.
 }
 IoResource_t;
 
@@ -139,12 +140,12 @@ void ioPoint_Init
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Create an I/O Point Resource.
+ * Create an Input/Output Resource object.
  *
- * @return Pointer to the Resource, or NULL if failed (client killed).
+ * @return Pointer to the Resource.
  */
 //--------------------------------------------------------------------------------------------------
-res_Resource_t* ioPoint_Create
+IoResource_t* Create
 (
     io_DataType_t dataType,
     resTree_EntryRef_t entryRef ///< The resource tree entry to attach this Resource to.
@@ -159,6 +160,47 @@ res_Resource_t* ioPoint_Create
     ioPtr->pushHandlerList = LE_DLS_LIST_INIT;
 
     ioPtr->dataType = dataType;
+    ioPtr->isMandatory = false;
+
+    return ioPtr;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Create an Input Resource.
+ *
+ * @return Pointer to the Resource.
+ */
+//--------------------------------------------------------------------------------------------------
+res_Resource_t* ioPoint_CreateInput
+(
+    io_DataType_t dataType,
+    resTree_EntryRef_t entryRef ///< The resource tree entry to attach this Resource to.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return &(Create(dataType, entryRef)->resource);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Create an Output Resource.
+ *
+ * @return Pointer to the Resource.
+ */
+//--------------------------------------------------------------------------------------------------
+res_Resource_t* ioPoint_CreateOutput
+(
+    io_DataType_t dataType,
+    resTree_EntryRef_t entryRef ///< The resource tree entry to attach this Resource to.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    IoResource_t* ioPtr = Create(dataType, entryRef);
+
+    ioPtr->isMandatory = true;
 
     return &(ioPtr->resource);
 }
@@ -422,4 +464,41 @@ void ioPoint_ProcessAccepted
 
         linkPtr = le_dls_PeekNext(&ioPtr->pushHandlerList, linkPtr);
     }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Mark an Output resource "optional".  (By default, they are marked "mandatory".)
+ */
+//--------------------------------------------------------------------------------------------------
+void ioPoint_MarkOptional
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    IoResource_t* ioPtr = CONTAINER_OF(resPtr, IoResource_t, resource);
+
+    ioPtr->isMandatory = false;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if a given resource is a mandatory output.  If so, it means that this is an output resource
+ * that must have a value before the related app function will begin working.
+ *
+ * @return true if a mandatory output, false if it's an optional output or not an output at all.
+ */
+//--------------------------------------------------------------------------------------------------
+bool ioPoint_IsMandatory
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    IoResource_t* ioPtr = CONTAINER_OF(resPtr, IoResource_t, resource);
+
+    return ioPtr->isMandatory;
 }

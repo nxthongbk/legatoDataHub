@@ -746,6 +746,33 @@ uint32_t admin_GetBufferBackupPeriod
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Check if a given resource is a mandatory output.  If so, it means that this is an output resource
+ * that must have a value before the related app function will begin working.
+ *
+ * @return true if a mandatory output, false if it's an optional output or not an output at all.
+ */
+//--------------------------------------------------------------------------------------------------
+bool admin_IsMandatory
+(
+    const char* path  ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if (resEntry == NULL)
+    {
+        return false;
+    }
+    else
+    {
+        return resTree_IsMandatory(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set a default value for a given resource.
  *
  * @note Default will be discarded by an Input or Output resource if the default's data type
