@@ -28,6 +28,7 @@
 #include "resTree.h"
 #include "ioPoint.h"
 #include "obs.h"
+#include "ioService.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -42,6 +43,7 @@ COMPONENT_INIT
     ioPoint_Init();
     obs_Init();
     resTree_Init();
+    ioService_Init();
 
     LE_INFO("Data Hub started.");
 }

@@ -245,4 +245,15 @@ uint32_t obs_GetBufferBackupPeriod
 );
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete buffer backup files that aren't being used.
+ */
+//--------------------------------------------------------------------------------------------------
+void obs_DeleteUnusedBackupFiles
+(
+    void
+);
+
+
 #endif // OBS_H_INCLUDE_GUARD

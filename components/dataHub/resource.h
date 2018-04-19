@@ -39,6 +39,7 @@ typedef struct res_Resource
     io_DataType_t overrideType;///< Data type of the override, if overrideRef != NULL.
     dataSample_Ref_t defaultValue; ///< Ref to default value; NULL if no default set.
     io_DataType_t defaultType;///< Data type of the default value, if defaultRef != NULL.
+    bool isConfigChanging;  ///< true if filter or routing is being changed.
 }
 res_Resource_t;
 
@@ -634,6 +635,34 @@ bool res_IsOverridden
 void res_RemoveOverride
 (
     res_Resource_t* resPtr
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify that administrative changes are about to be performed.
+ *
+ * Any resource whose filter or routing (source or destination) settings are changed after a
+ * call to res_StartUpdate() will stop accepting new data samples until res_EndUpdate() is called.
+ * If new samples are pushed to a resource that is in this state of suspended operation, only
+ * the newest one will be remembered and processed when res_EndUpdate() is called.
+ */
+//--------------------------------------------------------------------------------------------------
+void res_StartUpdate
+(
+    void
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify that all pending administrative changes have been applied, so normal operation may resume,
+ * and it's safe to delete buffer backup files that aren't being used.
+ */
+//--------------------------------------------------------------------------------------------------
+void res_EndUpdate
+(
+    void
 );
 
 

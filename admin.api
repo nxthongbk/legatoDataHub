@@ -59,14 +59,19 @@
  * The following subsections describe the configuration settings that can be made through the
  * Admin API.
  *
- * Whenever a configuration update is finished, the administrator app should call admin_UpdateDone()
- * to indicate to the Data Hub that the configuration session is finished and therefore it can
- * clean up things (such as non-volatile data buffer backup files) whose associated resources are no
- * longer present in the resource tree.
+ * Whenever a configuration update is expected to involve changes to more than one setting,
+ * admin_StartUpdate() should be called.  This signals to the Data Hub that the configuration may
+ * be temporarily in an invalid state, and therefore, to prevent the corruption of buffered data
+ * sets and/or the output of unexpected, out-of-range data to apps, the propagation of data samples
+ * through Observations that are being changed should be suspended until further notice.
  *
- * @note This can also later be used to implement automated disable-update-enable cycles for
- *       apps that provide "enable" outputs. (For now, it's up to the administrator app to take
- *       care of that.)
+ * When a configuration update is finished, the administrator app must call admin_EndUpdate()
+ * to indicate to the Data Hub that the configuration session is finished and therefore it can
+ * safely resume normal operations and clean up things (such as non-volatile data buffer
+ * backup files) whose associated resources are no longer present in the resource tree.
+ *
+ * @note Apps can register for notification of the starting and ending of updates using
+ *       io_AddUpdateStartEndHandler().
  *
  *
  * @subsection c_dataHubAdmin_Placeholders Placeholders
@@ -479,7 +484,8 @@ FUNCTION PushJson
  * destination resource.  If the destination resource already has a source resource, it will be
  * replaced. Does nothing if the route already exists.
  *
- * Creates Placeholders for any resources that do not yet exist in the resource tree.
+ * Creates Placeholders for any source or destination resource that doesn't yet exist in the
+ * resource tree.
  *
  * @note While an Input can have a source configured, it will ignore anything pushed to it
  *       from other resources via that route. Inputs only accept values pushed by the app that
@@ -1020,11 +1026,26 @@ FUNCTION bool IsMandatory
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Signal to the Data Hub that administrative changes are about to be performed.
+ *
+ * This will result in call-backs to any handlers registered using io_AddUpdateStartEndHandler().
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION StartUpdate
+(
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Signal to the Data Hub that all pending administrative changes have been applied and that
  * normal operation may resume.
  *
  * This may trigger clean-up actions, such as deleting non-volatile backups of any Observations
  * that do not exist at the time this function is called.
+ *
+ * This will also result in call-backs to any handlers registered using
+ * io_AddUpdateStartEndHandler().
  */
 //--------------------------------------------------------------------------------------------------
 FUNCTION EndUpdate

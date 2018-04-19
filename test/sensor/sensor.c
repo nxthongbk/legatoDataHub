@@ -121,9 +121,27 @@ static void EnableUpdateHandler
 }
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Call-back for receiving notification that an update is happening.
+ */
+//--------------------------------------------------------------------------------------------------
+static void UpdateStartEndHandler
+(
+    bool isStarting,
+    void* contextPtr // Not used.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_INFO("Configuration update %s.", isStarting ? "starting" : "finished");
+}
+
+
 COMPONENT_INIT
 {
     le_result_t result;
+
+    io_AddUpdateStartEndHandler(UpdateStartEndHandler, NULL);
 
     // This will be provided to the Data Hub.
     result = io_CreateInput(COUNTER_NAME, IO_DATA_TYPE_NUMERIC, "count");

@@ -1425,3 +1425,18 @@ uint32_t obs_GetBufferBackupPeriod
 
     return obsPtr->backupPeriod;
 }
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete buffer backup files that aren't being used.
+ */
+//--------------------------------------------------------------------------------------------------
+void obs_DeleteUnusedBackupFiles
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_INFO("***** Implement clean-up of unused buffer backup files.");
+}

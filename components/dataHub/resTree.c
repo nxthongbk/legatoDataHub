@@ -1438,3 +1438,84 @@ void resTree_RemoveOverride
     return res_RemoveOverride(resEntry->resourcePtr);
 }
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify that administrative changes are about to be performed.
+ *
+ * Any resource whose filter or routing (source or destination) settings are changed after a
+ * call to res_StartUpdate() will stop accepting new data samples until res_EndUpdate() is called.
+ * If new samples are pushed to a resource that is in this state of suspended operation, only
+ * the newest one will be remembered and processed when res_EndUpdate() is called.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_StartUpdate
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    res_StartUpdate();
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify that all pending administrative changes have been applied, so normal operation may resume,
+ * and it's safe to delete buffer backup files that aren't being used.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_EndUpdate
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    res_EndUpdate();
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * For each resource in the resource tree under a given entry, call a given function.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ForEachResourceUnder
+(
+    Entry_t* entryPtr,
+    void (*func)(res_Resource_t* resPtr, admin_EntryType_t entryType)
+)
+//--------------------------------------------------------------------------------------------------
+{
+    le_dls_Link_t* linkPtr = le_dls_Peek(&entryPtr->childList);
+
+    while (linkPtr != NULL)
+    {
+        Entry_t* childPtr = CONTAINER_OF(linkPtr, Entry_t, link);
+
+        if (childPtr->resourcePtr != NULL)
+        {
+            func(childPtr->resourcePtr, childPtr->type);
+        }
+
+        ForEachResourceUnder(childPtr, func);
+
+        // Go to next sibling
+        linkPtr = le_dls_PeekNext(&(entryPtr->childList), linkPtr);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * For each resource in the resource tree, call a given function.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_ForEachResource
+(
+    void (*func)(res_Resource_t* resPtr, admin_EntryType_t entryType)
+)
+//--------------------------------------------------------------------------------------------------
+{
+    ForEachResourceUnder(RootPtr, func);
+}

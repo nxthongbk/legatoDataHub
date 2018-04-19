@@ -7,7 +7,8 @@
 //--------------------------------------------------------------------------------------------------
 
 #include "dataHub.h"
-
+#include "ioService.h"
+#include "resource.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1473,11 +1474,35 @@ le_result_t admin_GetDataType
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Signal to the Data Hub that administrative changes are about to be performed.
+ *
+ * This will result in call-backs to any handlers registered using io_AddUpdateStartEndHandler().
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_StartUpdate
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_INFO("Data Hub administrative updates starting.");
+
+    ioService_StartUpdate();
+
+    res_StartUpdate();
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Signal to the Data Hub that all pending administrative changes have been applied and that
  * normal operation may resume.
  *
  * This may trigger clean-up actions, such as deleting non-volatile backups of any Observations
  * that do not exist at the time this function is called.
+ *
+ * This will also result in call-backs to any handlers registered using
+ * io_AddUpdateStartEndHandler().
  */
 //--------------------------------------------------------------------------------------------------
 void admin_EndUpdate
@@ -1488,5 +1513,7 @@ void admin_EndUpdate
 {
     LE_INFO("Data Hub administrative updates complete.");
 
-    // TODO: Clean up orphaned Observation buffer backup files.
+    ioService_EndUpdate();
+
+    res_EndUpdate();
 }

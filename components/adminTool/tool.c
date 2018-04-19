@@ -1386,6 +1386,8 @@ COMPONENT_INIT
 
         case ACTION_SET:
 
+            admin_StartUpdate();
+
             switch (Object)
             {
                 case OBJECT_SOURCE:
@@ -1438,9 +1440,13 @@ COMPONENT_INIT
                     fprintf(stderr, "Can't 'set' an Observation.\n");
                     exit(EXIT_FAILURE);
             }
+
+            admin_EndUpdate();
             break;
 
         case ACTION_REMOVE:
+
+            admin_StartUpdate();
 
             switch (Object)
             {
@@ -1490,6 +1496,8 @@ COMPONENT_INIT
                     admin_DeleteObs(PathArg);
                     break;
             }
+
+            admin_EndUpdate();
             break;
 
         default:

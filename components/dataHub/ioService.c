@@ -11,6 +11,38 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Used to store a registered Update Start/End Handler on the UpdateStartEndHandlerList.
+ *
+ * These are allocated from the UpdateStartEndHandlerPool.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    le_dls_Link_t link; ///< Used to link into the UpdateStartEndHandlerList
+    io_UpdateStartEndHandlerFunc_t callback;
+    void* contextPtr;
+}
+UpdateStartEndHandler_t;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * List of Update Start/End Handlers.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_dls_List_t UpdateStartEndHandlerList = LE_DLS_LIST_INIT;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Pool of UpdateStartEndHandler objects.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_mem_PoolRef_t UpdateStartEndHandlerPool = NULL;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get the client app's namespace.
  *
  * @return the reference to the namespace resource tree entry or NULL if failed.
@@ -1096,4 +1128,126 @@ void io_RemovePollHandler
 )
 //--------------------------------------------------------------------------------------------------
 {
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'io_UpdateStartEnd'
+ */
+//--------------------------------------------------------------------------------------------------
+io_UpdateStartEndHandlerRef_t io_AddUpdateStartEndHandler
+(
+    io_UpdateStartEndHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    UpdateStartEndHandler_t* handlerPtr = le_mem_ForceAlloc(UpdateStartEndHandlerPool);
+
+    handlerPtr->link = LE_DLS_LINK_INIT;
+
+    handlerPtr->callback = callbackPtr;
+    handlerPtr->contextPtr = contextPtr;
+
+    le_dls_Queue(&UpdateStartEndHandlerList, &handlerPtr->link);
+
+    return (io_UpdateStartEndHandlerRef_t)handlerPtr;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'io_UpdateStartEnd'
+ */
+//--------------------------------------------------------------------------------------------------
+void io_RemoveUpdateStartEndHandler
+(
+    io_UpdateStartEndHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    UpdateStartEndHandler_t* handlerPtr = (UpdateStartEndHandler_t*)handlerRef;
+
+    le_dls_Remove(&UpdateStartEndHandlerList, &handlerPtr->link);
+
+    le_mem_Release(handlerPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Call all the registered Update Start/End Handlers.
+ */
+//--------------------------------------------------------------------------------------------------
+static void CallUpdateStartEndHandlers
+(
+    bool isStarting
+)
+//--------------------------------------------------------------------------------------------------
+{
+    le_dls_Link_t* linkPtr = le_dls_Peek(&UpdateStartEndHandlerList);
+
+    while (linkPtr != NULL)
+    {
+        UpdateStartEndHandler_t* handlerPtr = CONTAINER_OF(linkPtr, UpdateStartEndHandler_t, link);
+
+        handlerPtr->callback(isStarting, handlerPtr->contextPtr);
+
+        linkPtr = le_dls_PeekNext(&UpdateStartEndHandlerList, linkPtr);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initializes the module.  Must be called before any other functions in the module are called.
+ */
+//--------------------------------------------------------------------------------------------------
+void ioService_Init
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    UpdateStartEndHandlerPool = le_mem_CreatePool("UpdateStartEndHandlers",
+                                                  sizeof(UpdateStartEndHandler_t));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify apps that care that administrative changes are about to be performed.
+ *
+ * This will result in call-backs to any handlers registered using io_AddUpdateStartEndHandler().
+ */
+//--------------------------------------------------------------------------------------------------
+void ioService_StartUpdate
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    CallUpdateStartEndHandlers(true);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify apps that care that all pending administrative changes have been applied and that
+ * normal operation may resume.
+ *
+ * This will result in call-backs to any handlers registered using io_AddUpdateStartEndHandler().
+ */
+//--------------------------------------------------------------------------------------------------
+void ioService_EndUpdate
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    CallUpdateStartEndHandlers(false);
 }

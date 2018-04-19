@@ -26,6 +26,8 @@
 #define NAMESPACE_H_INCLUDE_GUARD
 
 
+#include "resource.h"
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Reference to a Resource Tree Entry.
@@ -734,6 +736,45 @@ bool resTree_IsOverridden
 void resTree_RemoveOverride
 (
     resTree_EntryRef_t resEntry
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify that administrative changes are about to be performed.
+ *
+ * Any resource whose filter or routing (source or destination) settings are changed after a
+ * call to res_StartUpdate() will stop accepting new data samples until res_EndUpdate() is called.
+ * If new samples are pushed to a resource that is in this state of suspended operation, only
+ * the newest one will be remembered and processed when res_EndUpdate() is called.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_StartUpdate
+(
+    void
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify that all pending administrative changes have been applied, so normal operation may resume,
+ * and it's safe to delete buffer backup files that aren't being used.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_EndUpdate
+(
+    void
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * For each resource in the resource tree, call a given function.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_ForEachResource
+(
+    void (*func)(res_Resource_t* resPtr, admin_EntryType_t entryType)
 );
 
 

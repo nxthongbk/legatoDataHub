@@ -12,6 +12,10 @@
 #include "obs.h"
 
 
+/// true if an extended configuration update is in progress, false if in normal operating mode.
+static bool IsUpdateInProgress = false;
+
+
 /// Pool of Placeholder resource objects, which are instances of res_Resource_t.
 static le_mem_PoolRef_t PlaceholderPool = NULL;
 
@@ -371,6 +375,15 @@ le_result_t res_SetSource
         // Connect the source.
         le_dls_Queue(&(srcPtr->destList), &(destPtr->destListLink));
         destPtr->srcPtr = srcPtr;
+
+        // If an extended update is in progress, flag that the configuration of both the
+        // source and destination resources are changing, so acceptance of new pushed values
+        // should be suspended until the update finishes.
+        if (IsUpdateInProgress)
+        {
+            srcPtr->isConfigChanging = true;
+            destPtr->isConfigChanging = true;
+        }
     }
 
     return LE_OK;
@@ -492,29 +505,39 @@ void res_Push
     resPtr->pushedValue = dataSample;
     resPtr->pushedType = dataType;
 
-    // Ask the sub-class if this should be accepted as the new current value.
+    // If the resource is undergoing a change to its routing or filtering configuration,
+    // then acceptance of new samples is suspended until the configuration change is done.
+    // Otherwise, ask the sub-class if this should be accepted as the new current value.
     bool accepted;
-    switch (entryType)
+    if (resPtr->isConfigChanging)
     {
-        case ADMIN_ENTRY_TYPE_INPUT:
-        case ADMIN_ENTRY_TYPE_OUTPUT:
+        accepted = false;
+        LE_WARN("Rejecting pushed value because configuration update is in progress.");
+    }
+    else
+    {
+        switch (entryType)
+        {
+            case ADMIN_ENTRY_TYPE_INPUT:
+            case ADMIN_ENTRY_TYPE_OUTPUT:
 
-            accepted = ioPoint_ShouldAccept(resPtr, dataType, units);
-            break;
+                accepted = ioPoint_ShouldAccept(resPtr, dataType, units);
+                break;
 
-        case ADMIN_ENTRY_TYPE_OBSERVATION:
+            case ADMIN_ENTRY_TYPE_OBSERVATION:
 
-            accepted = obs_ShouldAccept(resPtr, dataType, dataSample);
-            break;
+                accepted = obs_ShouldAccept(resPtr, dataType, dataSample);
+                break;
 
-        case ADMIN_ENTRY_TYPE_PLACEHOLDER:
+            case ADMIN_ENTRY_TYPE_PLACEHOLDER:
 
-            accepted = true;  // Placeholders accept everything.
-            break;
+                accepted = true;  // Placeholders accept everything.
+                break;
 
-        default:
-            LE_FATAL("Unexpected entry type.");
-            break;
+            default:
+                LE_FATAL("Unexpected entry type.");
+                break;
+        }
     }
 
     if (accepted)
@@ -531,7 +554,7 @@ void res_Push
         }
         else
         {
-            // If we're passing on the pushed sample as the next current value, then
+            // If we're using the pushed sample as the next current value, then
             // increment the reference count.
             le_mem_AddRef(dataSample);
         }
@@ -671,6 +694,9 @@ void res_MoveAdminSettings
     destPtr->defaultType = srcPtr->defaultType;
     destPtr->defaultValue = srcPtr->defaultValue;
     srcPtr->defaultValue = NULL;
+
+    // Move the isConfigChanging flag.
+    destPtr->isConfigChanging = srcPtr->isConfigChanging;
 }
 
 
@@ -759,6 +785,11 @@ void res_SetMinPeriod
 //--------------------------------------------------------------------------------------------------
 {
     obs_SetMinPeriod(resPtr, minPeriod);
+
+    if (IsUpdateInProgress)
+    {
+        resPtr->isConfigChanging = true;
+    }
 }
 
 
@@ -794,6 +825,11 @@ void res_SetHighLimit
 //--------------------------------------------------------------------------------------------------
 {
     obs_SetHighLimit(resPtr, highLimit);
+
+    if (IsUpdateInProgress)
+    {
+        resPtr->isConfigChanging = true;
+    }
 }
 
 
@@ -829,6 +865,11 @@ void res_SetLowLimit
 //--------------------------------------------------------------------------------------------------
 {
     obs_SetLowLimit(resPtr, lowLimit);
+
+    if (IsUpdateInProgress)
+    {
+        resPtr->isConfigChanging = true;
+    }
 }
 
 
@@ -867,6 +908,11 @@ void res_SetChangeBy
 //--------------------------------------------------------------------------------------------------
 {
     obs_SetChangeBy(resPtr, change);
+
+    if (IsUpdateInProgress)
+    {
+        resPtr->isConfigChanging = true;
+    }
 }
 
 
@@ -1202,3 +1248,60 @@ void res_RemoveOverride
         }
     }
 }
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify that administrative changes are about to be performed.
+ *
+ * Any resource whose filter or routing (source or destination) settings are changed after a
+ * call to res_StartUpdate() will stop accepting new data samples until res_EndUpdate() is called.
+ * If new samples are pushed to a resource that is in this state of suspended operation, only
+ * the newest one will be remembered and processed when res_EndUpdate() is called.
+ */
+//--------------------------------------------------------------------------------------------------
+void res_StartUpdate
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    IsUpdateInProgress = true;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Clear the isConfigChanging flag on a given resource.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ClearConfigChangingFlag
+(
+    res_Resource_t* resPtr,
+    admin_EntryType_t entryType
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resPtr->isConfigChanging = false;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify that all pending administrative changes have been applied, so normal operation may resume,
+ * and it's safe to delete buffer backup files that aren't being used.
+ */
+//--------------------------------------------------------------------------------------------------
+void res_EndUpdate
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    IsUpdateInProgress = false;
+
+    resTree_ForEachResource(ClearConfigChangingFlag);
+
+    obs_DeleteUnusedBackupFiles();
+}
+
