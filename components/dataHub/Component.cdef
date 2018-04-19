@@ -35,8 +35,3 @@ sources:
     ioPoint.c
     obs.c
 }
-
-cflags:
-{
-    -std=c99
-}
