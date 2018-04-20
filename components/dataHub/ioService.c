@@ -110,12 +110,15 @@ static resTree_EntryRef_t FindResource
     {
         entryRef = resTree_FindEntry(entryRef, path);
     }
-
-    admin_EntryType_t entryType = resTree_GetEntryType(entryRef);
-    if ((entryType != ADMIN_ENTRY_TYPE_INPUT) && (entryType != ADMIN_ENTRY_TYPE_OUTPUT))
+    if (entryRef != NULL)
     {
-        LE_DEBUG("'%s' is not an Input or an Output.", path);
-        return NULL;
+        admin_EntryType_t entryType = resTree_GetEntryType(entryRef);
+
+        if ((entryType != ADMIN_ENTRY_TYPE_INPUT) && (entryType != ADMIN_ENTRY_TYPE_OUTPUT))
+        {
+            LE_DEBUG("'%s' is not an Input or an Output.", path);
+            entryRef = NULL;
+        }
     }
 
     return entryRef;
@@ -145,6 +148,8 @@ le_result_t io_CreateInput
 )
 //--------------------------------------------------------------------------------------------------
 {
+    LE_DEBUG("'%s' <%s> '%s'.", path, hub_GetDataTypeName(dataType), units);
+
     resTree_EntryRef_t resRef = NULL;
 
     resTree_EntryRef_t nsRef = GetClientNamespace();
@@ -223,6 +228,8 @@ le_result_t io_CreateOutput
 )
 //--------------------------------------------------------------------------------------------------
 {
+    LE_DEBUG("'%s' <%s> '%s'.", path, hub_GetDataTypeName(dataType), units);
+
     resTree_EntryRef_t resRef = NULL;
 
     resTree_EntryRef_t nsRef = GetClientNamespace();
@@ -292,6 +299,8 @@ void io_DeleteResource
 )
 //--------------------------------------------------------------------------------------------------
 {
+    LE_DEBUG("'%s'", path);
+
     // If the resource exists, delete it.
     resTree_EntryRef_t resRef = FindResource(path);
     if (resRef != NULL)
