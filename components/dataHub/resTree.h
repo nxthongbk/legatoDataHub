@@ -343,6 +343,8 @@ void resTree_Push
  * Add a Push Handler to an Output resource.
  *
  * @return Reference to the handler added.
+ *
+ * @note Can be removed by calling handler_Remove().
  */
 //--------------------------------------------------------------------------------------------------
 hub_HandlerRef_t resTree_AddPushHandler
@@ -351,17 +353,6 @@ hub_HandlerRef_t resTree_AddPushHandler
     io_DataType_t dataType,
     void* callbackPtr,
     void* contextPtr
-);
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Remove a Push Handler from an Output resource.
- */
-//--------------------------------------------------------------------------------------------------
-void resTree_RemovePushHandler
-(
-    hub_HandlerRef_t handlerRef
 );
 
 

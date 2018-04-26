@@ -27,6 +27,7 @@ static enum
     ACTION_QUERY,
     ACTION_POLL,
     ACTION_READ,
+    ACTION_WATCH,
 }
 Action = ACTION_UNSPECIFIED;
 
@@ -54,6 +55,14 @@ Object;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Flag indicating whether or not the output should be in JSON format.
+ */
+//--------------------------------------------------------------------------------------------------
+static bool UseJsonFormat = false;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Print help text to stdout and exit with EXIT_SUCCESS.
  */
 //--------------------------------------------------------------------------------------------------
@@ -68,6 +77,7 @@ static void HandleHelpRequest
         "    dhub - Data Hub administration tool.\n"
         "\n"
         "SYNOPSIS:\n"
+//        "    dhub ls [-r] [PATH]\n"  <-- List non-recursively, unless -r/--recursive given?
         "    dhub list [PATH]\n"
         "    dhub set source PATH SRC_PATH\n"
         "    dhub set default PATH VALUE\n"
@@ -80,6 +90,7 @@ static void HandleHelpRequest
         "    dhub set backupPeriod PATH\n"
         "    dhub remove OBJECT PATH\n"
         "    dhub get OBJECT PATH\n"
+        "    dhub watch [--json] PATH\n"
 //        "    dhub push PATH VALUE\n"
 //        "    dhub query PATH QUERY [--start=START]\n"
 //        "    dhub poll PATH\n"
@@ -165,6 +176,11 @@ static void HandleHelpRequest
         "            For the source, default, and override objects, the PATH must be\n"
         "            absolute (beginning with '/'). The other objects are only found\n"
         "            on Observations, so their PATH can be relative to /obs/.\n"
+        "\n"
+        "    dhub watch [--json] PATH\n"
+        "           Register for notification of updates to a resource at PATH.\n"
+        "           Print each update to stdout.  If --json specified, print as\n"
+        "           a JSON object.\n"
         "\n"
         "    dhub help\n"
         "    dhub -h\n"
@@ -1047,6 +1063,69 @@ static void SetOverride
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Call-back function that gets called whenever a watched resource receives an update to its current
+ * value.
+ */
+//--------------------------------------------------------------------------------------------------
+static void PushHandler
+(
+    double timestamp,
+    const char* value,
+    void* contextPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (UseJsonFormat)
+    {
+        printf("{ \"ts\": %lf, \"val\": %s }\n", timestamp, value);
+    }
+    else
+    {
+        time_t seconds = (size_t)timestamp;
+        size_t milliseconds = (timestamp - seconds) * 1000;
+
+        char timeStr[64];
+        ctime_r(&seconds, timeStr);  // Will write up to 26 bytes into timeStr.
+
+        // Get rid of the newline at the end of the time string.
+        char* newlinePtr = strchr(timeStr, '\n');
+        *newlinePtr = '\0';
+
+        // Get a pointer to the year.
+        char* yearPtr = newlinePtr - 4;
+
+        // Terminate the time string after the seconds.
+        *(yearPtr - 1) = '\0';
+
+        printf("%s.%-3zu %s: %s\n", timeStr, milliseconds, yearPtr, value);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Watch a resource for updates to its current value.
+ */
+//--------------------------------------------------------------------------------------------------
+static void Watch
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (UseJsonFormat)
+    {
+        admin_AddJsonPushHandler(PathArg, PushHandler, NULL);
+    }
+    else
+    {
+        admin_AddStringPushHandler(PathArg, PushHandler, NULL);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Perform validity check on an absolute resource path.
  *
  * @return Pointer to the validated path.
@@ -1141,6 +1220,12 @@ static void PathArgHandler
 )
 //--------------------------------------------------------------------------------------------------
 {
+    if (Action == ACTION_WATCH)
+    {
+        PathArg = ValidateAbsolutePath(arg);
+        return;
+    }
+
     switch (Object)
     {
         case OBJECT_SOURCE:
@@ -1292,6 +1377,14 @@ static void CommandArgHandler
 
         // Expect an object type argument ("source", "default" or "override").
         le_arg_AddPositionalCallback(ObjectTypeArgHandler);
+    }
+    else if (strcmp(arg, "watch") == 0)
+    {
+        Action = ACTION_WATCH;
+
+        // Expect a PATH argument and an optional --json argument.
+        le_arg_AddPositionalCallback(PathArgHandler);
+        le_arg_SetFlagVar(&UseJsonFormat, "j", "json");
     }
     else
     {
@@ -1499,6 +1592,11 @@ COMPONENT_INIT
 
             admin_EndUpdate();
             break;
+
+        case ACTION_WATCH:
+
+            Watch();
+            return;  // Return so that we enter the event loop and get push handler call-backs.
 
         default:
 

@@ -24,6 +24,7 @@
 #include "dataHub.h"
 #include "nan.h"
 #include "dataSample.h"
+#include "handler.h"
 #include "resource.h"
 #include "resTree.h"
 #include "ioPoint.h"
@@ -39,6 +40,7 @@
 COMPONENT_INIT
 {
     dataSample_Init();
+    handler_Init();
     res_Init();
     ioPoint_Init();
     obs_Init();

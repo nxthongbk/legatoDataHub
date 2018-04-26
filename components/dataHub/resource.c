@@ -10,6 +10,7 @@
 #include "resource.h"
 #include "ioPoint.h"
 #include "obs.h"
+#include "handler.h"
 
 
 /// true if an extended configuration update is in progress, false if in normal operating mode.
@@ -102,6 +103,7 @@ void res_Construct
     resPtr->destListLink = LE_DLS_LINK_INIT;
     resPtr->overrideValue = NULL;
     resPtr->defaultValue = NULL;
+    resPtr->pushHandlerList = LE_DLS_LIST_INIT;
 }
 
 
@@ -272,6 +274,8 @@ void res_Destruct
         le_mem_Release(resPtr->defaultValue);
         resPtr->defaultValue = NULL;
     }
+
+    handler_RemoveAll(&resPtr->pushHandlerList);
 }
 
 
@@ -454,26 +458,25 @@ static void UpdateCurrentValue
     // Take futher action by calling the sub-class's processing function.
     switch (resTree_GetEntryType(resPtr->entryRef))
     {
-        case ADMIN_ENTRY_TYPE_INPUT:
-        case ADMIN_ENTRY_TYPE_OUTPUT:
-
-            ioPoint_ProcessAccepted(resPtr, dataType, dataSample);
-            break;
-
         case ADMIN_ENTRY_TYPE_OBSERVATION:
 
             obs_ProcessAccepted(resPtr, dataType, dataSample);
             break;
 
+        case ADMIN_ENTRY_TYPE_INPUT:
+        case ADMIN_ENTRY_TYPE_OUTPUT:
         case ADMIN_ENTRY_TYPE_PLACEHOLDER:
 
-            // Placeholders don't do any additional processing.
+            // No additional processing beyond calling registered push handlers.
             break;
 
         default:
             LE_FATAL("Unexpected entry type.");
             break;
     }
+
+    // Call any the push handlers that match the data type of the sample.
+    handler_CallAll(&resPtr->pushHandlerList, dataType, dataSample);
 }
 
 
@@ -577,6 +580,8 @@ void res_Push
  * Add a Push Handler to an Output resource.
  *
  * @return Reference to the handler added.
+ *
+ * @note Can be removed by calling handler_Remove().
  */
 //--------------------------------------------------------------------------------------------------
 hub_HandlerRef_t res_AddPushHandler
@@ -588,22 +593,9 @@ hub_HandlerRef_t res_AddPushHandler
 )
 //--------------------------------------------------------------------------------------------------
 {
-    return ioPoint_AddPushHandler(resPtr, dataType, callbackPtr, contextPtr);
-}
+    LE_ASSERT(resTree_IsResource(resPtr->entryRef));
 
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Remove a Push Handler from an Output resource.
- */
-//--------------------------------------------------------------------------------------------------
-void res_RemovePushHandler
-(
-    hub_HandlerRef_t handlerRef
-)
-//--------------------------------------------------------------------------------------------------
-{
-    ioPoint_RemovePushHandler(handlerRef);
+    return handler_Add(&resPtr->pushHandlerList, dataType, callbackPtr, contextPtr);
 }
 
 
@@ -630,7 +622,8 @@ bool res_HasAdminSettings
     return (   (resPtr->srcPtr != NULL)     // Source
             || (!le_dls_IsEmpty(&resPtr->destList)) // Destination list
             || (resPtr->overrideValue != NULL) // Override
-            || (resPtr->defaultValue != NULL) ); // Default
+            || (resPtr->defaultValue != NULL) // Default
+            || (! le_dls_IsEmpty(&resPtr->pushHandlerList)) ); // Push handlers
 }
 
 
@@ -697,6 +690,9 @@ void res_MoveAdminSettings
 
     // Move the isConfigChanging flag.
     destPtr->isConfigChanging = srcPtr->isConfigChanging;
+
+    // Move the push handler list.
+    handler_MoveAll(&destPtr->pushHandlerList, &srcPtr->pushHandlerList);
 }
 
 

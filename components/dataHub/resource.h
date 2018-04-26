@@ -40,6 +40,7 @@ typedef struct res_Resource
     dataSample_Ref_t defaultValue; ///< Ref to default value; NULL if no default set.
     io_DataType_t defaultType;///< Data type of the default value, if defaultRef != NULL.
     bool isConfigChanging;  ///< true if filter or routing is being changed.
+    le_dls_List_t pushHandlerList;  ///< List of Push Handler callbacks registered on this resource.
 }
 res_Resource_t;
 
@@ -278,6 +279,8 @@ void res_Push
  * Add a Push Handler to an Output resource.
  *
  * @return Reference to the handler added.
+ *
+ * @note Can be removed by calling handler_Remove().
  */
 //--------------------------------------------------------------------------------------------------
 hub_HandlerRef_t res_AddPushHandler
@@ -286,17 +289,6 @@ hub_HandlerRef_t res_AddPushHandler
     io_DataType_t dataType,
     void* callbackPtr,
     void* contextPtr
-);
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Remove a Push Handler from an Output resource.
- */
-//--------------------------------------------------------------------------------------------------
-void res_RemovePushHandler
-(
-    hub_HandlerRef_t handlerRef
 );
 
 

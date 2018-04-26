@@ -7,6 +7,7 @@
 //--------------------------------------------------------------------------------------------------
 
 #include "dataHub.h"
+#include "handler.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -473,7 +474,8 @@ void io_PushJson
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Add handler function for an event.
+ * Add a handler function to be called when a value is pushed to (and accepted by) an Input
+ * or Output in the client app's namespace.
  *
  * @return A reference to the handler or NULL if failed and client has been killed.
  */
@@ -513,7 +515,16 @@ static hub_HandlerRef_t AddPushHandler
         return NULL;
     }
 
-    return resTree_AddPushHandler(resRef, dataType, callbackPtr, contextPtr);
+    hub_HandlerRef_t handlerRef = resTree_AddPushHandler(resRef, dataType, callbackPtr, contextPtr);
+
+    // If the resource has a current value call the push handler now (if it's a data type match).
+    dataSample_Ref_t sampleRef = resTree_GetCurrentValue(resRef);
+    if (sampleRef != NULL)
+    {
+        handler_Call(handlerRef, resTree_GetDataType(resRef), sampleRef);
+    }
+
+    return handlerRef;
 }
 
 
@@ -552,7 +563,7 @@ void io_RemoveTriggerPushHandler
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_RemovePushHandler((hub_HandlerRef_t)handlerRef);
+    handler_Remove((hub_HandlerRef_t)handlerRef);
 }
 
 
@@ -591,7 +602,7 @@ void io_RemoveBooleanPushHandler
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_RemovePushHandler((hub_HandlerRef_t)handlerRef);
+    handler_Remove((hub_HandlerRef_t)handlerRef);
 }
 
 
@@ -631,7 +642,7 @@ void io_RemoveNumericPushHandler
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_RemovePushHandler((hub_HandlerRef_t)handlerRef);
+    handler_Remove((hub_HandlerRef_t)handlerRef);
 }
 
 
@@ -671,7 +682,7 @@ void io_RemoveStringPushHandler
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_RemovePushHandler((hub_HandlerRef_t)handlerRef);
+    handler_Remove((hub_HandlerRef_t)handlerRef);
 }
 
 
@@ -710,7 +721,7 @@ void io_RemoveJsonPushHandler
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_RemovePushHandler((hub_HandlerRef_t)handlerRef);
+    handler_Remove((hub_HandlerRef_t)handlerRef);
 }
 
 

@@ -34,4 +34,5 @@ sources:
     resource.c
     ioPoint.c
     obs.c
+    handler.c
 }

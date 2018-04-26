@@ -104,20 +104,6 @@ void ioPoint_RemovePushHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Perform processing of an accepted pushed data sample that is specific to an Input or Output
- * resource.
- */
-//--------------------------------------------------------------------------------------------------
-void ioPoint_ProcessAccepted
-(
-    res_Resource_t* resPtr,
-    io_DataType_t dataType,     ///< Data type of the data sample.
-    dataSample_Ref_t sampleRef  ///< Data sample.
-);
-
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Mark an Output resource "optional".  (By default, they are marked "mandatory".)
  */
 //--------------------------------------------------------------------------------------------------

@@ -9,6 +9,7 @@
 #include "dataHub.h"
 #include "ioService.h"
 #include "resource.h"
+#include "handler.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -178,6 +179,225 @@ void admin_PushJson
                      IO_DATA_TYPE_JSON,
                      dataSample_CreateJson(timestamp, value));
     }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add a handler function to be called when a value is pushed to (and accepted by) a resource
+ * anywhere in the resource tree.  If there's no resource at that location yet, a placeholder will
+ * be created.
+ *
+ * @return A reference to the handler, which can be removed using handler_Remove().
+ */
+//--------------------------------------------------------------------------------------------------
+static hub_HandlerRef_t AddPushHandler
+(
+    const char* path,   ///< Absolute resource path.
+    io_DataType_t dataType,
+    void* callbackPtr,  ///< Callback function pointer
+    void* contextPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resRef = resTree_GetResource(resTree_GetRoot(), path);
+    if (resRef == NULL)
+    {
+        LE_KILL_CLIENT("Bad resource path '%s'.", path);
+        return NULL;
+    }
+
+    return resTree_AddPushHandler(resRef, dataType, callbackPtr, contextPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'admin_TriggerPush'
+ */
+//--------------------------------------------------------------------------------------------------
+admin_TriggerPushHandlerRef_t admin_AddTriggerPushHandler
+(
+    const char* path,
+        ///< [IN] Absolute path of resource.
+    admin_TriggerPushHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    hub_HandlerRef_t ref = AddPushHandler(path, IO_DATA_TYPE_TRIGGER, callbackPtr, contextPtr);
+
+    return (admin_TriggerPushHandlerRef_t)ref;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'admin_TriggerPush'
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_RemoveTriggerPushHandler
+(
+    admin_TriggerPushHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    handler_Remove((hub_HandlerRef_t)handlerRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'admin_BooleanPush'
+ */
+//--------------------------------------------------------------------------------------------------
+admin_BooleanPushHandlerRef_t admin_AddBooleanPushHandler
+(
+    const char* path,
+        ///< [IN] Absolute path of resource.
+    admin_BooleanPushHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    hub_HandlerRef_t ref = AddPushHandler(path, IO_DATA_TYPE_BOOLEAN, callbackPtr, contextPtr);
+
+    return (admin_BooleanPushHandlerRef_t)ref;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'admin_BooleanPush'
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_RemoveBooleanPushHandler
+(
+    admin_BooleanPushHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    handler_Remove((hub_HandlerRef_t)handlerRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'admin_NumericPush'
+ */
+//--------------------------------------------------------------------------------------------------
+admin_NumericPushHandlerRef_t admin_AddNumericPushHandler
+(
+    const char* path,
+        ///< [IN] Absolute path of resource.
+    admin_NumericPushHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    hub_HandlerRef_t ref = AddPushHandler(path, IO_DATA_TYPE_NUMERIC, callbackPtr, contextPtr);
+
+    return (admin_NumericPushHandlerRef_t)ref;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'admin_NumericPush'
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_RemoveNumericPushHandler
+(
+    admin_NumericPushHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    handler_Remove((hub_HandlerRef_t)handlerRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'admin_StringPush'
+ */
+//--------------------------------------------------------------------------------------------------
+admin_StringPushHandlerRef_t admin_AddStringPushHandler
+(
+    const char* path,
+        ///< [IN] Absolute path of resource.
+    admin_StringPushHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    hub_HandlerRef_t ref = AddPushHandler(path, IO_DATA_TYPE_STRING, callbackPtr, contextPtr);
+
+    return (admin_StringPushHandlerRef_t)ref;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'admin_StringPush'
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_RemoveStringPushHandler
+(
+    admin_StringPushHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    handler_Remove((hub_HandlerRef_t)handlerRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'admin_JsonPush'
+ */
+//--------------------------------------------------------------------------------------------------
+admin_JsonPushHandlerRef_t admin_AddJsonPushHandler
+(
+    const char* path,
+        ///< [IN] Absolute path of resource.
+    admin_JsonPushHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    hub_HandlerRef_t ref = AddPushHandler(path, IO_DATA_TYPE_JSON, callbackPtr, contextPtr);
+
+    return (admin_JsonPushHandlerRef_t)ref;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'admin_JsonPush'
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_RemoveJsonPushHandler
+(
+    admin_JsonPushHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    handler_Remove((hub_HandlerRef_t)handlerRef);
 }
 
 
@@ -1093,7 +1313,7 @@ le_result_t admin_GetJsonDefault
 //--------------------------------------------------------------------------------------------------
 void admin_RemoveDefault
 (
-    const char* LE_NONNULL path
+    const char* path
         ///< [IN] Absolute path of the resource.
 )
 //--------------------------------------------------------------------------------------------------
