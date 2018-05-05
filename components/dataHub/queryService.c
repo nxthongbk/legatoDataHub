@@ -11,6 +11,55 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Find an Observation.
+ *
+ * @return Reference to the Observation's resource tree entry, or NULL if not found.
+ */
+//--------------------------------------------------------------------------------------------------
+static resTree_EntryRef_t FindObservation
+(
+    const char* path
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entry;
+
+    if (strncmp(path, "/obs/", 5) == 0)
+    {
+        entry = resTree_FindEntry(resTree_GetRoot(), path);
+    }
+    else if (path[0] == '/')
+    {
+        return NULL;
+    }
+    else
+    {
+        resTree_EntryRef_t obsNamespace = resTree_FindEntry(resTree_GetRoot(), "obs");
+
+        if (obsNamespace == NULL)
+        {
+            return NULL;
+        }
+
+        entry = resTree_FindEntry(obsNamespace, path);
+    }
+
+    if (entry == NULL)
+    {
+        return NULL;
+    }
+
+    if (resTree_GetEntryType(entry) != ADMIN_ENTRY_TYPE_OBSERVATION)
+    {
+        return NULL;
+    }
+
+    return entry;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Read data out of a buffer.  Data is written to a given file descriptor in JSON-encoded format
  * as an array of objects containing a timestamp and a value (or just a timestamp for triggers).
  * E.g.,
@@ -20,11 +69,8 @@
  * @endcode
  *
  * @return
- *  - LE_OK if successful.
+ *  - LE_OK if the read operation started successfully.
  *  - LE_NOT_FOUND if the Observation doesn't exist.
- *  - LE_NO_MEMORY if the Observation's buffer size is zero.
- *  - LE_COMM_ERROR if an error occurred while writing to the file descriptor.
- *  - LE_DUPLICATE if the same client already has an unfinished read operation in progress.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t query_ReadBufferJson
@@ -37,12 +83,31 @@ le_result_t query_ReadBufferJson
         ///< or after an absolute number of seconds since the Epoch
         ///< (if startafter > 30 years).
         ///< Use NAN (not a number) to read the whole buffer.
-    int outputFile
+    int outputFile,
         ///< [IN] File descriptor to write the data to.
+    query_ReadCompletionFunc_t handlerPtr,
+        ///< [IN] Completion callback to be called when operation finishes.
+    void* contextPtr
+        ///< [IN]
 )
 //--------------------------------------------------------------------------------------------------
 {
-    return LE_NO_MEMORY;
+    resTree_EntryRef_t entryRef = FindObservation(obsPath);
+
+    if (entryRef == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    if (startAfter < 0)
+    {
+        LE_KILL_CLIENT("Negative startAfter time provided (%lf).", startAfter);
+        return LE_OK;   // Doesn't matter what we return.
+    }
+
+    resTree_ReadBufferJson(entryRef, startAfter, outputFile, handlerPtr, contextPtr);
+
+    return LE_OK;
 }
 
 
@@ -66,6 +131,13 @@ double query_GetMin
 )
 //--------------------------------------------------------------------------------------------------
 {
+    resTree_EntryRef_t entryRef = FindObservation(obsPath);
+
+    if (entryRef == NULL)
+    {
+        return NAN;
+    }
+
     return NAN;
 }
 
@@ -90,6 +162,13 @@ double query_GetMax
 )
 //--------------------------------------------------------------------------------------------------
 {
+    resTree_EntryRef_t entryRef = FindObservation(obsPath);
+
+    if (entryRef == NULL)
+    {
+        return NAN;
+    }
+
     return NAN;
 }
 
@@ -114,6 +193,13 @@ double query_GetMean
 )
 //--------------------------------------------------------------------------------------------------
 {
+    resTree_EntryRef_t entryRef = FindObservation(obsPath);
+
+    if (entryRef == NULL)
+    {
+        return NAN;
+    }
+
     return NAN;
 }
 
@@ -139,6 +225,13 @@ double query_GetStdDev
 )
 //--------------------------------------------------------------------------------------------------
 {
+    resTree_EntryRef_t entryRef = FindObservation(obsPath);
+
+    if (entryRef == NULL)
+    {
+        return NAN;
+    }
+
     return NAN;
 }
 

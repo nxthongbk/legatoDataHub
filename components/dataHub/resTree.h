@@ -769,4 +769,27 @@ void resTree_ForEachResource
 );
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read data out of a buffer.  Data is written to a given file descriptor in JSON-encoded format
+ * as an array of objects containing a timestamp and a value (or just a timestamp for triggers).
+ * E.g.,
+ *
+ * @code
+ * [{"t":1537483647.125,"v":true},{"t":1537483657.128,"v":true}]
+ * @endcode
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_ReadBufferJson
+(
+    resTree_EntryRef_t obsEntry, ///< Observation entry.
+    double startAfter,  ///< Start after this many seconds ago, or after an absolute number of
+                        ///< seconds since the Epoch (if startafter > 30 years).
+                        ///< Use NAN (not a number) to read the whole buffer.
+    int outputFile, ///< File descriptor to write the data to.
+    query_ReadCompletionFunc_t handlerPtr, ///< Completion callback.
+    void* contextPtr    ///< Value to be passed to completion callback.
+);
+
+
 #endif // NAMESPACE_H_INCLUDE_GUARD

@@ -45,6 +45,9 @@
                                     + IO_MAX_RESOURCE_PATH_LEN \
                                     + sizeof(BACKUP_SUFFIX)  )
 
+/// Number of seconds in 30 years.
+#define THIRTY_YEARS 946684800.0
+
 /// Observation Resource.  Allocated from the Observation Pool.
 typedef struct
 {
@@ -67,8 +70,11 @@ typedef struct
     le_timer_Ref_t backupTimer; ///< Reference to the timer used to trigger the next backup.
 
     le_sls_List_t sampleList; ///< Queue of buffered data samples (oldest first, newest last).
+
+    le_dls_List_t readOpList; ///< List of ongoing Read Operations on the buffered samples.
 }
 Observation_t;
+
 
 
 /// Object used to link a Data Sample into an Observation's buffer.
@@ -81,11 +87,36 @@ typedef struct
 BufferEntry_t;
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Record used for keeping track of buffer read operations.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    le_dls_Link_t link; ///< Used to link into the Observation's list of ongoing read operations.
+    Observation_t* obsPtr;  ///< Ptr to Observation whose buffer is being read.
+    le_fdMonitor_Ref_t fdMonitor; ///< Used to get notification when the FD is clear to write.
+    int fd; ///< fd to write to.
+    BufferEntry_t* nextEntryPtr; ///< Buff entry to load into write buff next (ref counted).
+    enum { START, SAMPLE, COMMA, END } state; ///< What are we supposed to write next?
+    char writeBuffer[IO_MAX_STRING_VALUE_LEN];  ///< Buffer currently being written.
+    size_t writeLen; ///< Number of characters (excl. null terminator) in the writeBuffer.
+    size_t writeOffset;   ///< Offset into the writeBuffer to write from next.
+    query_ReadCompletionFunc_t handlerPtr; ///< Completion callback.
+    void* contextPtr;   ///< Value to be passed to completion callback.
+}
+ReadOperation_t;
+
+
 /// Pool of Observation objects.
 static le_mem_PoolRef_t ObservationPool = NULL;
 
 /// Pool of Buffer Entry objects.
 static le_mem_PoolRef_t BufferEntryPool = NULL;
+
+/// Pool to allocate ReadOperation_t object from.
+static le_mem_PoolRef_t ReadOperationPool = NULL;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -173,6 +204,53 @@ static void DeleteBackup
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Buffer Entry destructor.
+ */
+//--------------------------------------------------------------------------------------------------
+static void BufferEntryDestructor
+(
+    void* objectPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    BufferEntry_t* buffEntryPtr = objectPtr;
+
+    le_mem_Release(buffEntryPtr->sampleRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Terminate a read operation.
+ */
+//--------------------------------------------------------------------------------------------------
+static void EndRead
+(
+    ReadOperation_t* opPtr,
+    le_result_t result
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (opPtr->nextEntryPtr != NULL)
+    {
+        le_mem_Release(opPtr->nextEntryPtr);
+        opPtr->nextEntryPtr = NULL;
+    }
+
+    le_fdMonitor_Delete(opPtr->fdMonitor);
+
+    close(opPtr->fd);
+
+    opPtr->handlerPtr(result, opPtr->contextPtr);
+
+    le_dls_Remove(&opPtr->obsPtr->readOpList, &opPtr->link);
+
+    le_mem_Release(opPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Observation destructor.
  */
 //--------------------------------------------------------------------------------------------------
@@ -202,24 +280,317 @@ static void ObservationDestructor
         DeleteBackup(obsPtr);
     }
 
+    // If there are read operations in progress, end them.
+    while (le_dls_IsEmpty(&obsPtr->readOpList) == false)
+    {
+        EndRead(CONTAINER_OF(le_dls_Peek(&obsPtr->readOpList), ReadOperation_t, link),
+                LE_COMM_ERROR);
+    }
+
     res_Destruct(&obsPtr->resource);
 }
 
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Buffer Entry destructor.
+ * Load the write buffer with a JSON representation of the next sample to be read.
+ *
+ * @return true if successful, false if there are no more samples.
  */
 //--------------------------------------------------------------------------------------------------
-static void BufferEntryDestructor
+static bool LoadReadOpBuffer
 (
-    void* objectPtr
+    ReadOperation_t* opPtr
 )
 //--------------------------------------------------------------------------------------------------
 {
-    BufferEntry_t* buffEntryPtr = objectPtr;
+    opPtr->writeLen = 0;
+    opPtr->writeOffset = 0;
+    opPtr->writeBuffer[0] = '\0';
 
-    le_mem_Release(buffEntryPtr->sampleRef);
+    do
+    {
+        if (opPtr->nextEntryPtr == NULL)
+        {
+            return false;
+        }
+
+        // If the buffer entry's ref count should be 2.  If it is only 1, then we know it has
+        // fallen off the end of the observation's buffer, which means that all entries in the
+        // observation's buffer are now newer than this one.
+        if (le_mem_GetRefCount(opPtr->nextEntryPtr) == 1)
+        {
+            le_mem_Release(opPtr->nextEntryPtr);
+            le_sls_Link_t* linkPtr = le_sls_Peek(&opPtr->obsPtr->sampleList);
+            if (linkPtr != NULL)
+            {
+                opPtr->nextEntryPtr = CONTAINER_OF(linkPtr, BufferEntry_t, link);
+                le_mem_AddRef(opPtr->nextEntryPtr);
+            }
+            else
+            {
+                opPtr->nextEntryPtr = NULL;
+                return false;
+            }
+        }
+
+        // Copy the JSON version of the contents of the current buffer entry's data into
+        // the write buffer, if there's space.
+        le_result_t result;
+        result = dataSample_ConvertToJson(opPtr->nextEntryPtr->sampleRef,
+                                          res_GetDataType(&(opPtr->obsPtr->resource)),
+                                          opPtr->writeBuffer,
+                                          sizeof(opPtr->writeBuffer));
+        if (result != LE_OK)
+        {
+            LE_ERROR("JSON value doesn't fit in write buffer. Skipping.");
+            // Leave the writeLen 0 so we'll loop around and try the next sample.
+        }
+        else
+        {
+            opPtr->writeLen = strlen(opPtr->writeBuffer);
+        }
+
+        // Advance the nextEntryPtr to the next entry in the Observation's data sample list.
+        le_sls_Link_t* linkPtr = le_sls_PeekNext(&opPtr->obsPtr->sampleList,
+                                                 &opPtr->nextEntryPtr->link);
+        le_mem_Release(opPtr->nextEntryPtr);
+
+        if (linkPtr != NULL)
+        {
+            opPtr->nextEntryPtr = CONTAINER_OF(linkPtr, BufferEntry_t, link);
+            le_mem_AddRef(opPtr->nextEntryPtr);
+        }
+        else
+        {
+            opPtr->nextEntryPtr = NULL;
+        }
+
+    } while (opPtr->writeLen == 0); // Loop if the write buffer is still empty.
+
+    return true;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Write to an unbuffered file descriptor.
+ *
+ * @return The number of bytes written.  -1 on error (errno is set).
+ */
+//--------------------------------------------------------------------------------------------------
+static ssize_t WriteToFd
+(
+    int fd,
+    const void* buffPtr,
+    size_t byteCount
+)
+//--------------------------------------------------------------------------------------------------
+{
+    ssize_t result;
+
+    do
+    {
+        result = write(fd, buffPtr, byteCount);
+
+    } while ((result == -1) && (errno == EINTR));
+
+    return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Continue a read operation.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ContinueReadOp
+(
+    ReadOperation_t* opPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    ssize_t result;
+    for (;;)
+    {
+        const char* writeBuffPtr;
+        size_t writeLen;
+
+        // Figure out what to write based on the state.
+        switch (opPtr->state)
+        {
+            case START:
+
+                writeBuffPtr = "[";
+                writeLen = 1;
+
+                break;
+
+            case SAMPLE:
+
+                writeBuffPtr = opPtr->writeBuffer + opPtr->writeOffset;
+                writeLen = opPtr->writeLen - opPtr->writeOffset;
+
+                break;
+
+            case COMMA:
+
+                writeBuffPtr = ",";
+                writeLen = 1;
+
+                break;
+
+            case END:
+
+                writeBuffPtr = "]";
+                writeLen = 1;
+
+                break;
+        }
+
+        // Write and check for errors.
+        result = WriteToFd(opPtr->fd, writeBuffPtr, writeLen);
+        if (result == -1)
+        {
+            if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
+            {
+                // Return and wait for this function to be called again by the FD Monitor.
+                return;
+            }
+
+            LE_ERROR("Error writing (%m).");
+            EndRead(opPtr, LE_COMM_ERROR);
+
+            return;
+        }
+
+        // Advance to the next state.
+        switch (opPtr->state)
+        {
+            case START:
+
+                // If there's a sample in the write buffer,
+                if (opPtr->writeLen > 0)
+                {
+                    opPtr->state = SAMPLE;
+                }
+                else
+                {
+                    opPtr->state = END;
+                }
+                break;
+
+            case SAMPLE:
+
+                // Update the write offset.
+                opPtr->writeOffset += result;
+
+                // If the write buffer has been written entirely,
+                if (opPtr->writeOffset == opPtr->writeLen)
+                {
+                    // Try to load the next sample into the write buffer.
+                    if (LoadReadOpBuffer(opPtr))
+                    {
+                        opPtr->state = COMMA;
+                    }
+                    else
+                    {
+                        opPtr->state = END;
+                    }
+                }
+                // Note: If the write buffer has not been written entirely, stay in the SAMPLE
+                // state and loop back around to write more.
+                break;
+
+            case COMMA:
+
+                opPtr->state = SAMPLE;
+                break;
+
+            case END:
+
+                EndRead(opPtr, LE_OK);
+
+                return;
+        }
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Event handler call-back for events on a read operation's write file descriptor.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ReadOpFdEventHandler
+(
+    int fd,
+    short events
+)
+//--------------------------------------------------------------------------------------------------
+{
+    ReadOperation_t* opPtr = le_fdMonitor_GetContextPtr();
+
+    // Check for error or hang-up.
+    if ((events & POLLERR) || (events & POLLHUP) || (events & POLLRDHUP))
+    {
+        LE_ERROR("Error or hang-up on output stream.");
+        EndRead(opPtr, LE_COMM_ERROR);
+    }
+    // Note: The only other reason for this function to be called is POLLOUT (writeable).
+    else
+    {
+        ContinueReadOp(opPtr);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Start a read operation on a given Observation's buffer.
+ */
+//--------------------------------------------------------------------------------------------------
+static void StartRead
+(
+    Observation_t* obsPtr,
+    BufferEntry_t* startPtr, ///< Ptr to buffer entry to start at, or NULL if read data set empty.
+    int outputFile, ///< File descriptor to write the data to.
+    query_ReadCompletionFunc_t handlerPtr, ///< Completion callback.
+    void* contextPtr    ///< Value to be passed to completion callback.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    // Set the fd non-blocking
+    if (0 != fcntl(outputFile, F_SETFL, O_NONBLOCK))
+    {
+        LE_ERROR("Failed to activate non-blocking mode (%m).");
+        handlerPtr(LE_COMM_ERROR, contextPtr);
+        return;
+    }
+
+    ReadOperation_t* opPtr = le_mem_ForceAlloc(ReadOperationPool);
+
+    opPtr->link = LE_DLS_LINK_INIT;
+    le_dls_Queue(&obsPtr->readOpList, &opPtr->link);
+
+    opPtr->obsPtr = obsPtr;
+
+    opPtr->fdMonitor = le_fdMonitor_Create("Read", outputFile, ReadOpFdEventHandler, POLLOUT);
+    le_fdMonitor_SetContextPtr(opPtr->fdMonitor, opPtr);
+    opPtr->fd = outputFile;
+    opPtr->nextEntryPtr = startPtr;
+    // We hold a ref count on the buffer entry to prevent it from being released.
+    if (startPtr != NULL)
+    {
+        le_mem_AddRef(startPtr);
+    }
+    opPtr->handlerPtr = handlerPtr;
+    opPtr->contextPtr = contextPtr;
+
+    opPtr->state = START;
+    (void)LoadReadOpBuffer(opPtr);
+
+    ContinueReadOp(opPtr);
 }
 
 
@@ -272,14 +643,14 @@ static void TruncateBuffer
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Writes a buffer load of data to a backup file.
+ * Writes a buffer load of data to a buffered file stream.
  *
  * On error, logs an error message and closes the file.
  *
  * @return true if successful, false if failed.
  */
 //--------------------------------------------------------------------------------------------------
-static bool WriteToFile
+static bool WriteToStream
 (
     FILE* file,
     const void* buffPtr,
@@ -419,7 +790,7 @@ static bool WriteSamplesToFile
 
         // Write the timestamp.
         double timestamp = dataSample_GetTimestamp(buffEntryPtr->sampleRef);
-        if (!WriteToFile(file, &timestamp, sizeof(timestamp)))
+        if (!WriteToStream(file, &timestamp, sizeof(timestamp)))
         {
             return false;
         }
@@ -434,7 +805,7 @@ static bool WriteSamplesToFile
             case IO_DATA_TYPE_BOOLEAN:
             {
                 bool value = dataSample_GetBoolean(buffEntryPtr->sampleRef);
-                if (!WriteToFile(file, &value, sizeof(value)))
+                if (!WriteToStream(file, &value, sizeof(value)))
                 {
                     return false;
                 }
@@ -443,7 +814,7 @@ static bool WriteSamplesToFile
             case IO_DATA_TYPE_NUMERIC:
             {
                 double value = dataSample_GetNumeric(buffEntryPtr->sampleRef);
-                if (!WriteToFile(file, &value, sizeof(value)))
+                if (!WriteToStream(file, &value, sizeof(value)))
                 {
                     return false;
                 }
@@ -453,11 +824,11 @@ static bool WriteSamplesToFile
             {
                 const char* valuePtr = dataSample_GetString(buffEntryPtr->sampleRef);
                 uint32_t stringLen = strlen(valuePtr);
-                if (!WriteToFile(file, &stringLen, 4))
+                if (!WriteToStream(file, &stringLen, 4))
                 {
                     return false;
                 }
-                if (!WriteToFile(file, valuePtr, stringLen))
+                if (!WriteToStream(file, valuePtr, stringLen))
                 {
                     return false;
                 }
@@ -467,11 +838,11 @@ static bool WriteSamplesToFile
             {
                 const char* valuePtr = dataSample_GetJson(buffEntryPtr->sampleRef);
                 uint32_t stringLen = strlen(valuePtr);
-                if (!WriteToFile(file, &stringLen, 4))
+                if (!WriteToStream(file, &stringLen, 4))
                 {
                     return false;
                 }
-                if (!WriteToFile(file, valuePtr, stringLen))
+                if (!WriteToStream(file, valuePtr, stringLen))
                 {
                     return false;
                 }
@@ -708,7 +1079,7 @@ static void Backup
 
     // Write in the version byte.
     uint8_t byte = 0;
-    if (!WriteToFile(file, &byte, 1))
+    if (!WriteToStream(file, &byte, 1))
     {
         return;
     }
@@ -720,14 +1091,14 @@ static void Backup
         le_atomFile_CancelStream(file);
         return;
     }
-    if (!WriteToFile(file, &byte, 1))
+    if (!WriteToStream(file, &byte, 1))
     {
         return;
     }
 
     // Write in the number of samples.
     uint32_t count = obsPtr->count;
-    if (!WriteToFile(file, &count, 4))
+    if (!WriteToStream(file, &count, 4))
     {
         return;
     }
@@ -813,6 +1184,8 @@ void obs_Init
 
     BufferEntryPool = le_mem_CreatePool("Buffer Entry", sizeof(BufferEntry_t));
     le_mem_SetDestructor(BufferEntryPool, BufferEntryDestructor);
+
+    ReadOperationPool = le_mem_CreatePool("Read Op", sizeof(ReadOperation_t));
 }
 
 
@@ -849,6 +1222,8 @@ res_Resource_t* obs_Create
     obsPtr->backupTimer = NULL;
 
     obsPtr->sampleList = LE_SLS_LIST_INIT;
+
+    obsPtr->readOpList = LE_DLS_LIST_INIT;
 
     return &obsPtr->resource;
 }
@@ -965,8 +1340,8 @@ bool obs_ShouldAccept
 
         // If both limits are enabled and the low limit is higher than the high limit, then
         // this is the "deadband" case. ( - <------HxxxxxxxxxL------> + )
-        if (   (obsPtr->highLimit != NAN)
-            && (obsPtr->lowLimit != NAN)
+        if (   (!isnan(obsPtr->highLimit))
+            && (!isnan(obsPtr->lowLimit))
             && (obsPtr->lowLimit > obsPtr->highLimit)  )
         {
             if ((numericValue > obsPtr->lowLimit) || (numericValue < obsPtr->highLimit))
@@ -977,12 +1352,12 @@ bool obs_ShouldAccept
         // In all other cases, reject if lower than non-NAN low limit or higher than non-NAN high.
         else
         {
-            if ((obsPtr->lowLimit != NAN) && (numericValue < obsPtr->lowLimit))
+            if ((!isnan(obsPtr->lowLimit)) && (numericValue < obsPtr->lowLimit))
             {
                 return false;
             }
 
-            if ((obsPtr->highLimit != NAN) && (numericValue > obsPtr->highLimit))
+            if ((!isnan(obsPtr->highLimit)) && (numericValue > obsPtr->highLimit))
             {
                 return false;
             }
@@ -998,7 +1373,7 @@ bool obs_ShouldAccept
     if (previousValue != NULL)
     {
         // If there is a changedBy filter in effect,
-        if ((obsPtr->changeBy != 0) && (obsPtr->changeBy != NAN))
+        if ((obsPtr->changeBy != 0) && (!isnan(obsPtr->changeBy)))
         {
             // If overridden, reject everything because the value won't change.
             if (res_IsOverridden(resPtr))
@@ -1042,7 +1417,7 @@ bool obs_ShouldAccept
 
         // All of the above can be done without a system call, so that's why we do the
         // minPeriod check last.
-        if ((obsPtr->minPeriod != 0) && (obsPtr->minPeriod != NAN))
+        if ((obsPtr->minPeriod != 0) && (!isnan(obsPtr->minPeriod)))
         {
             now = GetRelativeTimeMs();  // system call
 
@@ -1439,4 +1814,67 @@ void obs_DeleteUnusedBackupFiles
 //--------------------------------------------------------------------------------------------------
 {
     LE_INFO("***** Implement clean-up of unused buffer backup files.");
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read data out of a buffer.  Data is written to a given file descriptor in JSON-encoded format
+ * as an array of objects containing a timestamp and a value (or just a timestamp for triggers).
+ * E.g.,
+ *
+ * @code
+ * [{"t":1537483647.125,"v":true},{"t":1537483657.128,"v":true}]
+ * @endcode
+ */
+//--------------------------------------------------------------------------------------------------
+void obs_ReadBufferJson
+(
+    res_Resource_t* resPtr, ///< Ptr to the resource object for the Observation.
+    double startAfter,  ///< Start after this many seconds ago, or after an absolute number of
+                        ///< seconds since the Epoch (if startafter > 30 years).
+                        ///< Use NAN (not a number) to read the whole buffer.
+    int outputFile, ///< File descriptor to write the data to.
+    query_ReadCompletionFunc_t handlerPtr, ///< Completion callback.
+    void* contextPtr    ///< Value to be passed to completion callback.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    // Find the starting data sample in the Observation's buffer (starting at the oldest end).
+    BufferEntry_t* startPtr = NULL;
+    le_sls_Link_t* linkPtr = le_sls_Peek(&obsPtr->sampleList);
+    if (isnan(startAfter))
+    {
+        if (linkPtr != NULL)
+        {
+            startPtr = CONTAINER_OF(linkPtr, BufferEntry_t, link);
+        }
+    }
+    else
+    {
+        // If the startAfter time is less than or equal to 30 years, then convert to an
+        // absolute timestamp by subtracting it from the current time.
+        if (startAfter <= THIRTY_YEARS)
+        {
+            le_clk_Time_t now = le_clk_GetAbsoluteTime();
+            startAfter = ((((double)(now.usec)) / 1000000) + now.sec) - startAfter;
+        }
+
+        while (linkPtr != NULL)
+        {
+            BufferEntry_t* buffEntryPtr = CONTAINER_OF(linkPtr, BufferEntry_t, link);
+
+            if (dataSample_GetTimestamp(buffEntryPtr->sampleRef) > startAfter)
+            {
+                startPtr = buffEntryPtr;
+                break;
+            }
+
+            linkPtr = le_sls_PeekNext(&obsPtr->sampleList, linkPtr);
+        }
+    }
+
+    StartRead(obsPtr, startPtr, outputFile, handlerPtr, contextPtr);
 }

@@ -89,6 +89,17 @@ USETYPES io.api;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Completion callbacks for query_ReadBufferJson() must look like this.
+ */
+//--------------------------------------------------------------------------------------------------
+HANDLER ReadCompletion
+(
+    le_result_t result  ///< LE_OK if successful, LE_COMM_ERROR if write to outputFile failed.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Read data out of a buffer.  Data is written to a given file descriptor in JSON-encoded format
  * as an array of objects containing a timestamp and a value (or just a timestamp for triggers).
  * E.g.,
@@ -98,11 +109,8 @@ USETYPES io.api;
  * @endcode
  *
  * @return
- *  - LE_OK if successful.
+ *  - LE_OK if the read operation started successfully.
  *  - LE_NOT_FOUND if the Observation doesn't exist.
- *  - LE_NO_MEMORY if the Observation's buffer size is zero.
- *  - LE_COMM_ERROR if an error occurred while writing to the file descriptor.
- *  - LE_DUPLICATE if the same client already has an unfinished read operation in progress.
  */
 //--------------------------------------------------------------------------------------------------
 FUNCTION le_result_t ReadBufferJson
@@ -113,7 +121,8 @@ FUNCTION le_result_t ReadBufferJson
                           ///< or after an absolute number of seconds since the Epoch
                           ///< (if startafter > 30 years).
                           ///< Use NAN (not a number) to read the whole buffer.
-    file outputFile IN ///< File descriptor to write the data to.
+    file outputFile IN, ///< File descriptor to write the data to.
+    handler ReadCompletion IN ///< Completion callback to be called when operation finishes.
 );
 
 

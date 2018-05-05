@@ -94,7 +94,7 @@ static void HandleHelpRequest
 //        "    dhub push PATH VALUE\n"
 //        "    dhub query PATH QUERY [--start=START]\n"
 //        "    dhub poll PATH\n"
-//        "    dhub read PATH [--start=START]\n"
+        "    dhub read PATH [--start=START]\n"
         "    dhub help\n"
         "    dhub -h\n"
         "    dhub --help\n"
@@ -182,6 +182,18 @@ static void HandleHelpRequest
         "           Print each update to stdout.  If --json specified, print as\n"
         "           a JSON object.\n"
         "\n"
+        "    dhub read PATH [--start=START]\n"
+        "            Reads the contents of the data sample buffer of the Observation\n"
+        "            at PATH. PATH may be absolute or relative to /obs/. The data is\n"
+        "            output to stdout in JSON format as an array of objects, each with\n"
+        "            a sample and a value, e.g.,\n"
+        "\n"
+        "              '[{\"t\":1537483647.125,\"v\":true},{\"t\":1537483657.128,\"v\":true}]'\n"
+        "\n"
+        "            If the --start=START option is given, then START is the timestamp\n"
+        "            (in seconds since the Epoch) after which reading will start. If\n"
+        "            --start is not given, the entire buffer will be read.\n"
+        "\n"
         "    dhub help\n"
         "    dhub -h\n"
         "    dhub --help\n"
@@ -217,6 +229,14 @@ static const char* SrcPathArg = NULL;
  */
 //--------------------------------------------------------------------------------------------------
 static const char* ValueArg = NULL;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Start timestamp argument for read commands.
+ */
+//--------------------------------------------------------------------------------------------------
+static double StartArg = (0.0 / 0.0);  // NAN by default
 
 
 //--------------------------------------------------------------------------------------------------
@@ -515,7 +535,7 @@ static void PrintDoubleSetting
 )
 //--------------------------------------------------------------------------------------------------
 {
-    if (value == NAN)
+    if (isnan(value))
     {
         printf("%s: not set\n", label);
     }
@@ -944,7 +964,7 @@ static void GetDoubleSetting
 {
     double value = getterFunc(path);
 
-    if (value != NAN)
+    if (!isnan(NAN))
     {
         printf("%lf\n", value);
     }
@@ -1336,6 +1356,34 @@ static void ObjectTypeArgHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Command-line argument handler call-back for the --start= option to the read command.
+ */
+//--------------------------------------------------------------------------------------------------
+static void StartArgHandler
+(
+    const char* arg
+)
+//--------------------------------------------------------------------------------------------------
+{
+    StartArg = ParseDouble(arg);
+
+    if (StartArg < 0)
+    {
+        fprintf(stderr, "Start time must be a positive number.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (errno != 0)
+    {
+        fprintf(stderr, "Error parsing '--start=%s'.\n"
+                        "Must be a positive number of seconds.\n", arg);
+        exit(EXIT_FAILURE);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Command-line argument handler call-back for the first positional argument, which is the command.
  */
 //--------------------------------------------------------------------------------------------------
@@ -1386,11 +1434,45 @@ static void CommandArgHandler
         le_arg_AddPositionalCallback(PathArgHandler);
         le_arg_SetFlagVar(&UseJsonFormat, "j", "json");
     }
+    else if (strcmp(arg, "read") == 0)
+    {
+        Action = ACTION_READ;
+        Object = OBJECT_OBSERVATION;
+
+        // Expect a path argument.
+        le_arg_AddPositionalCallback(PathArgHandler);
+
+        // Accept an optional numerical --start= argument.
+        le_arg_SetStringCallback(StartArgHandler, NULL, "start");
+    }
     else
     {
         fprintf(stderr, "Unrecognized command '%s'.  Try 'dhub help' for assistance.\n", arg);
         exit(EXIT_FAILURE);
     }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read completion callback function.  This gets called when a read operation has completed.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ReadComplete
+(
+    le_result_t result,
+    void* contextPtr ///< Not used.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (result != LE_OK)
+    {
+        fprintf(stderr, "Read operation failed (%s).\n", LE_RESULT_TXT(result));
+        exit(EXIT_FAILURE);
+    }
+
+    putchar('\n');
+    exit(EXIT_SUCCESS);
 }
 
 
@@ -1597,6 +1679,17 @@ COMPONENT_INIT
 
             Watch();
             return;  // Return so that we enter the event loop and get push handler call-backs.
+
+        case ACTION_READ:
+
+            if (   query_ReadBufferJson(PathArg, StartArg, dup(fileno(stdout)), ReadComplete, NULL)
+                != LE_OK )
+            {
+                fprintf(stderr, "'%s' is not an Observation.\n", PathArg);
+                exit(EXIT_FAILURE);
+            }
+
+            return;  // Return instead of falling-through to exit. Wait for completion callback.
 
         default:
 
