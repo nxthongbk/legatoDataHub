@@ -87,6 +87,15 @@ typedef struct
 BufferEntry_t;
 
 
+/// Each data sample in a read operation looks like the following:
+/// {"t":1537483647.125371,"v":true}
+/// The largest value is IO_MAX_STRING_VALUE_LEN bytes long.
+/// The timestamp is a double-precision floating point number. Doubles can be
+/// hundreds of bytes long if the maximum precision is used in non-scientific notation,
+/// but in this case they typically won't be more than 6 decimal places.
+#define READ_OP_BUFF_BYTES (IO_MAX_STRING_VALUE_LEN + 48)
+
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Record used for keeping track of buffer read operations.
@@ -100,7 +109,7 @@ typedef struct
     int fd; ///< fd to write to.
     BufferEntry_t* nextEntryPtr; ///< Buff entry to load into write buff next (ref counted).
     enum { START, SAMPLE, COMMA, END } state; ///< What are we supposed to write next?
-    char writeBuffer[IO_MAX_STRING_VALUE_LEN];  ///< Buffer currently being written.
+    char writeBuffer[READ_OP_BUFF_BYTES];  ///< Buffer currently being written.
     size_t writeLen; ///< Number of characters (excl. null terminator) in the writeBuffer.
     size_t writeOffset;   ///< Offset into the writeBuffer to write from next.
     query_ReadCompletionFunc_t handlerPtr; ///< Completion callback.
@@ -334,21 +343,37 @@ static bool LoadReadOpBuffer
             }
         }
 
-        // Copy the JSON version of the contents of the current buffer entry's data into
-        // the write buffer, if there's space.
-        le_result_t result;
-        result = dataSample_ConvertToJson(opPtr->nextEntryPtr->sampleRef,
-                                          res_GetDataType(&(opPtr->obsPtr->resource)),
-                                          opPtr->writeBuffer,
-                                          sizeof(opPtr->writeBuffer));
-        if (result != LE_OK)
+        int len = snprintf(opPtr->writeBuffer,
+                           sizeof(opPtr->writeBuffer),
+                           "{\"t\":%lf,\"v\":",
+                           dataSample_GetTimestamp(opPtr->nextEntryPtr->sampleRef));
+        if (len >= sizeof(opPtr->writeBuffer))
         {
-            LE_ERROR("JSON value doesn't fit in write buffer. Skipping.");
+            LE_CRIT("Buffer overflow. Skipping entry.");
             // Leave the writeLen 0 so we'll loop around and try the next sample.
         }
         else
         {
-            opPtr->writeLen = strlen(opPtr->writeBuffer);
+            // Copy the JSON version of the contents of the current buffer entry's data into
+            // the write buffer, if there's space (leaving room for an additional '}' at the end).
+            le_result_t result = dataSample_ConvertToJson(opPtr->nextEntryPtr->sampleRef,
+                                                          res_GetDataType(&(opPtr->obsPtr->resource)),
+                                                          opPtr->writeBuffer + len,
+                                                          sizeof(opPtr->writeBuffer) - len - 1);
+            if (result != LE_OK)
+            {
+                LE_ERROR("JSON value doesn't fit in write buffer. Skipping.");
+                // Leave the writeLen 0 so we'll loop around and try the next sample.
+            }
+            else
+            {
+                len += strlen(opPtr->writeBuffer + len);
+
+                opPtr->writeBuffer[len] = '}';
+                opPtr->writeBuffer[len + 1] = '\0';
+
+                opPtr->writeLen = len + 1;
+            }
         }
 
         // Advance the nextEntryPtr to the next entry in the Observation's data sample list.
