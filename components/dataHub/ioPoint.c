@@ -132,6 +132,7 @@ res_Resource_t* ioPoint_CreateOutput
 {
     IoResource_t* ioPtr = Create(dataType, entryRef);
 
+    // By default, all outputs are mandatory.
     ioPtr->isMandatory = true;
 
     return &(ioPtr->resource);
@@ -173,10 +174,17 @@ bool ioPoint_ShouldAccept
     io_DataType_t destDataType = ioPoint_GetDataType(resPtr);
 
     // Check for data type mismatches.
-    // Note that JSON and string type Inputs and Outputs can accept any type of data sample.
-    if (   (dataType != destDataType)
-        && (destDataType != IO_DATA_TYPE_STRING)
-        && (destDataType != IO_DATA_TYPE_JSON) )
+    // Note that trigger, JSON, and string type Inputs and Outputs can accept any type of
+    // data sample.  Trigger type resources just discard the value.  JSON and string type
+    // resources can convert other types to their type.  Trigger type resources don't care
+    // about units either.
+    if (destDataType == IO_DATA_TYPE_TRIGGER)
+    {
+        return true;
+    }
+    else if (   (dataType != destDataType)
+             && (destDataType != IO_DATA_TYPE_STRING)
+             && (destDataType != IO_DATA_TYPE_JSON) )
     {
         LE_WARN("Rejecting push: data type mismatch (pushing %s to %s).",
                 hub_GetDataTypeName(dataType),

@@ -138,6 +138,27 @@ static void HandlePeriodPush
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Handle a "trigger" update from the Data Hub.
+ */
+//--------------------------------------------------------------------------------------------------
+static void HandleTriggerPush
+(
+    double timestamp,   ///< Don't care about this.
+    void* contextPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Sensor_t* sensorPtr = contextPtr;
+
+    if (sensorPtr->isEnabled)
+    {
+        sensorPtr->sampleFunc(sensorPtr);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Creates a periodic sensor scaffold for a sensor with a given name.
  *
  * This makes the sensor appear in the Data Hub and creates a timer for that sensor.
@@ -191,6 +212,7 @@ psensor_Ref_t psensor_Create
         LE_FATAL("Failed to create Data Hub Output '%s' (%s).", path, LE_RESULT_TXT(result));
     }
     dhubIO_AddBooleanPushHandler(path, HandleEnablePush, sensorPtr);
+    dhubIO_SetBooleanDefault(path, true);
 
     LE_ASSERT(snprintf(path, sizeof(path), "%s/period", name) < sizeof(path));
     result = dhubIO_CreateOutput(path, DHUBIO_DATA_TYPE_NUMERIC, "s");
@@ -199,6 +221,15 @@ psensor_Ref_t psensor_Create
         LE_FATAL("Failed to create Data Hub Output '%s' (%s).", path, LE_RESULT_TXT(result));
     }
     dhubIO_AddNumericPushHandler(path, HandlePeriodPush, sensorPtr);
+
+    LE_ASSERT(snprintf(path, sizeof(path), "%s/trigger", name) < sizeof(path));
+    result = dhubIO_CreateOutput(path, DHUBIO_DATA_TYPE_TRIGGER, "");
+    if (result != LE_OK)
+    {
+        LE_FATAL("Failed to create Data Hub Output '%s' (%s).", path, LE_RESULT_TXT(result));
+    }
+    dhubIO_AddTriggerPushHandler(path, HandleTriggerPush, sensorPtr);
+    dhubIO_MarkOptional(path);
 
     return sensorPtr;
 }

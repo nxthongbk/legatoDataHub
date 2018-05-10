@@ -1,6 +1,10 @@
 #include "legato.h"
 #include "interfaces.h"
 
+#define dhubIO_DataType_t io_DataType_t
+
+#include "periodicSensor.h"
+
 static bool IsEnabled = false;
 
 static le_timer_Ref_t Timer;
@@ -8,6 +12,32 @@ static le_timer_Ref_t Timer;
 #define COUNTER_NAME "counter/value"
 #define PERIOD_NAME "counter/period"
 #define ENABLE_NAME "counter/enable"
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function called by the periodicSensor component when it's time to generate a "sample" of the
+ * fake temperature sensor.
+ */
+//--------------------------------------------------------------------------------------------------
+static void SampleTemp
+(
+    psensor_Ref_t sensorRef
+)
+//--------------------------------------------------------------------------------------------------
+{
+    // The "temperature" is a sine wave function between -20 and +40 C over time.
+    le_clk_Time_t now = le_clk_GetAbsoluteTime();
+
+    double timestamp = (double)(now.sec) + ((double)(now.usec) / 1000000);
+
+    #define PI 3.14159265
+
+    double rads = timestamp * PI / 180.0;
+
+    psensor_PushNumeric(sensorRef, timestamp, sin(rads) * 30 + 10);
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -170,5 +200,5 @@ COMPONENT_INIT
     le_timer_SetRepeat(Timer, 0);
     le_timer_SetHandler(Timer, TimerExpired);
 
-    LE_ASSERT(le_timer_GetMsInterval(Timer) == 0);
+    LE_ASSERT(psensor_Create("temperature", IO_DATA_TYPE_NUMERIC, "degC", SampleTemp) != NULL);
 }

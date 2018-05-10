@@ -11,7 +11,7 @@ appInfoStub:
 	mkapp -t localhost test/appInfoStub.adef -i $(LEGATO_ROOT)/interfaces/supervisor -i $(CURDIR)
 
 sensor:
-	mkapp -t localhost test/sensor.adef -i $(PWD)
+	mkapp -t localhost test/sensor.adef -i $(PWD) -s components -i components/periodicSensor
 
 actuator:
 	mkapp -t localhost test/actuator.adef -i $(PWD)
@@ -20,19 +20,25 @@ actuator:
 clean:
 	rm -rf _build* *.update docs backup
 
+DHUB = _build_dataHub/localhost/app/dataHub/staging/read-only/bin/dhub
+
 .PHONY: start stop
 start: stop all
 	# LE_LOG_LEVEL=DEBUG startlegato
 	startlegato
 	sdir bind "<$(USER)>.le_appInfo" "<$(USER)>.le_appInfo"
 	sdir bind "<$(USER)>.sensord.sensor.io" "<$(USER)>.io"
+	sdir bind "<$(USER)>.sensord.periodicSensor.dhubIO" "<$(USER)>.io"
 	sdir bind "<$(USER)>.actuatord.actuator.io" "<$(USER)>.io"
 	sdir bind "<$(USER)>.dhubToolAdmin" "<$(USER)>.admin"
 	sdir bind "<$(USER)>.dhubToolIo" "<$(USER)>.io"
 	sdir bind "<$(USER)>.dhubToolQuery" "<$(USER)>.query"
 	test/supervisor
-	_build_dataHub/localhost/app/dataHub/staging/read-only/bin/dhub set source /app/actuator/counter/value /app/sensor/counter/value
-#	_build_dataHub/localhost/app/dataHub/staging/read-only/bin/dhub set default /app/sensor/counter/period 4
+	$(DHUB) set bufferSize temp 100
+	$(DHUB) set default /app/sensor/counter/period 0.25
+	$(DHUB) set source /app/sensor/temperature/trigger /app/sensor/counter/value
+	$(DHUB) set source /obs/temp /app/sensor/temperature/value
+	$(DHUB) set default /app/sensor/counter/enable true
 
 stop:
 	stoplegato

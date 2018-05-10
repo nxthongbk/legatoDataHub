@@ -93,7 +93,6 @@ static void HandleHelpRequest
         "    dhub watch [--json] PATH\n"
 //        "    dhub push PATH VALUE\n"
 //        "    dhub query PATH QUERY [--start=START]\n"
-//        "    dhub poll PATH\n"
         "    dhub read PATH [--start=START]\n"
         "    dhub help\n"
         "    dhub -h\n"

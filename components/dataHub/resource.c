@@ -545,9 +545,20 @@ void res_Push
 
     if (accepted)
     {
+        // If the destination resource is a trigger type Input or Output and the pushed sample
+        // is not a trigger, then create a new trigger sample with the same timestamp as the
+        // pushed sample and use that.
+        if (   (dataType != IO_DATA_TYPE_TRIGGER)
+            && (   (entryType == ADMIN_ENTRY_TYPE_INPUT)
+                || (entryType == ADMIN_ENTRY_TYPE_OUTPUT) )
+            && (ioPoint_GetDataType(resPtr) == IO_DATA_TYPE_TRIGGER)  )
+        {
+            dataSample = dataSample_CreateTrigger(dataSample_GetTimestamp(dataSample));
+            dataType = IO_DATA_TYPE_TRIGGER;
+        }
         // If an override is in effect, the current value becomes a new data sample that has
         // the same timestamp as the pushed sample but the override's value.
-        if (resPtr->overrideValue != NULL)
+        else if (resPtr->overrideValue != NULL)
         {
             dataSample_Ref_t overrideSample = dataSample_Copy(resPtr->overrideType,
                                                               resPtr->overrideValue);

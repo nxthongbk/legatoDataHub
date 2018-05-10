@@ -10,3 +10,11 @@ sources:
 {
     sensor.c
 }
+
+requires:
+{
+    component:
+    {
+        periodicSensor
+    }
+}
