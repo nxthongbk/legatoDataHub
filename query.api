@@ -25,21 +25,6 @@
  *  - query_GetString() - get the current value of the resource, if the data type is string
  *  - query_GetJson() - get the current value of the resource in JSON format (with any data type)
  *
- * In addition, some Input resources support on-demand polling.
- * These Input resources can be polled for a fresh value by calling one of the following
- * polling functions:
- *  - query_PollBoolean()
- *  - query_PollNumeric()
- *  - query_PollString()
- *  - query_PollJson()
- *
- * @note It makes no sense to poll a trigger type input, because triggers have no value.
- *
- * Some Inputs do not support polling. If such an input is polled, the current value will be
- * returned instead of a freshly sampled value.
- *
- * To check if a resource supports polling, call query_IsPollable().
- *
  * All Observations that have non-zero buffer sizes with any type of data in them can have
  * data fetched from their buffers in JSON format using
  *  - query_ReadBufferJson()
@@ -229,6 +214,7 @@ FUNCTION le_result_t GetDataType
  *  - LE_OK if successful.
  *  - LE_NOT_FOUND if the resource was not found.
  *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
+ *  - LE_OVERFLOW if the units string was truncated because it is larger than the buffer provided.
  */
 //--------------------------------------------------------------------------------------------------
 FUNCTION le_result_t GetUnits
@@ -314,6 +300,7 @@ FUNCTION le_result_t GetNumeric
  *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
  *  - LE_UNAVAILABLE if the resource doesn't have a current value (yet).
  *  - LE_FORMAT_ERROR if the resource has another data type.
+ *  - LE_OVERFLOW if the value was truncated because it is larger than the buffer provided.
  */
 //--------------------------------------------------------------------------------------------------
 FUNCTION le_result_t GetString
@@ -335,6 +322,7 @@ FUNCTION le_result_t GetString
  *  - LE_NOT_FOUND if the resource was not found.
  *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
  *  - LE_UNAVAILABLE if the resource doesn't have a current value (yet).
+ *  - LE_OVERFLOW if the value was truncated because it is larger than the buffer provided.
  */
 //--------------------------------------------------------------------------------------------------
 FUNCTION le_result_t GetJson

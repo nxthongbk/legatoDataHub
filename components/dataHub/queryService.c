@@ -292,6 +292,7 @@ le_result_t query_GetDataType
  *  - LE_OK if successful.
  *  - LE_NOT_FOUND if the resource was not found.
  *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
+ *  - LE_OVERFLOW if the units string was truncated because it is larger than the buffer provided.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t query_GetUnits
@@ -319,12 +320,7 @@ le_result_t query_GetUnits
     }
     else
     {
-        if (LE_OK != le_utf8_Copy(units, resTree_GetUnits(entryRef), unitsSize, NULL))
-        {
-            LE_CRIT("Units buffer overflowed.");  // This should never happen.
-        }
-
-        return LE_OK;
+        return le_utf8_Copy(units, resTree_GetUnits(entryRef), unitsSize, NULL);
     }
 }
 
@@ -511,6 +507,7 @@ le_result_t query_GetNumeric
  *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
  *  - LE_UNAVAILABLE if the resource doesn't have a current value (yet).
  *  - LE_FORMAT_ERROR if the resource has another data type.
+ *  - LE_OVERFLOW if the value was truncated because it is larger than the buffer provided.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t query_GetString
@@ -554,12 +551,7 @@ le_result_t query_GetString
         {
             *timestampPtr = dataSample_GetTimestamp(sampleRef);
 
-            if (LE_OK != le_utf8_Copy(value, dataSample_GetString(sampleRef), valueSize, NULL))
-            {
-                LE_CRIT("Value buffer overflow.");  // Should never happen.
-            }
-
-            return LE_OK;
+            return le_utf8_Copy(value, dataSample_GetString(sampleRef), valueSize, NULL);
         }
     }
 }
@@ -575,6 +567,7 @@ le_result_t query_GetString
  *  - LE_NOT_FOUND if the resource was not found.
  *  - LE_UNSUPPORTED if the path refers to a namespace (which can't have a data type).
  *  - LE_UNAVAILABLE if the resource doesn't have a current value (yet).
+ *  - LE_OVERFLOW if the value was truncated because it is larger than the buffer provided.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t query_GetJson
@@ -618,20 +611,12 @@ le_result_t query_GetJson
 
             if (dataType == IO_DATA_TYPE_JSON)
             {
-                if (LE_OK != le_utf8_Copy(value, dataSample_GetJson(sampleRef), valueSize, NULL))
-                {
-                    LE_CRIT("Value buffer overflow.");  // Should never happen.
-                }
+                return le_utf8_Copy(value, dataSample_GetJson(sampleRef), valueSize, NULL);
             }
             else
             {
-                if (LE_OK != dataSample_ConvertToJson(sampleRef, dataType, value, valueSize))
-                {
-                    LE_CRIT("Value buffer overflow.");  // Should never happen.
-                }
+                return dataSample_ConvertToJson(sampleRef, dataType, value, valueSize);
             }
-
-            return LE_OK;
         }
     }
 }
