@@ -90,8 +90,8 @@ static void HandleHelpRequest
         "    dhub set backupPeriod PATH\n"
         "    dhub remove OBJECT PATH\n"
         "    dhub get OBJECT PATH\n"
+        "    dhub push PATH [[--json] VALUE]\n"
         "    dhub watch [--json] PATH\n"
-//        "    dhub push PATH VALUE\n"
 //        "    dhub query PATH QUERY [--start=START]\n"
         "    dhub read PATH [--start=START]\n"
         "    dhub help\n"
@@ -175,6 +175,14 @@ static void HandleHelpRequest
         "            For the source, default, and override objects, the PATH must be\n"
         "            absolute (beginning with '/'). The other objects are only found\n"
         "            on Observations, so their PATH can be relative to /obs/.\n"
+        "\n"
+        "    dhub push PATH [[--json] VALUE]\n"
+        "            Pushes a VALUE to the the resource at PATH. If VALUE is omitted,\n"
+        "            a trigger is pushed.  If VALUE is specified, --json (or -j) can\n"
+        "            optionally be used to specify that the VALUE should be pushed as\n"
+        "            JSON; otherwise the type will be inferred (i.e., 'true' and\n"
+        "            'false' are treated as Boolean, numbers are treated as numerical,\n"
+        "            and everything else is treated as a string.\n"
         "\n"
         "    dhub watch [--json] PATH\n"
         "           Register for notification of updates to a resource at PATH.\n"
@@ -905,12 +913,14 @@ static void SetSetting
             numericFunc(path, number);
         }
         // If that didn't work, treat as a string.
+        else if (UseJsonFormat)
+        {
+            jsonFunc(path, value);
+        }
         else
         {
             stringFunc(path, value);
         }
-
-        // TODO: Add a --json (-j) option to specify JSON.
     }
 }
 
@@ -1038,6 +1048,51 @@ static void SetDefault
                admin_SetNumericDefault,
                admin_SetStringDefault,
                admin_SetJsonDefault);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the default value of a resource.
+ */
+//--------------------------------------------------------------------------------------------------
+static void Push
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    // If no value was specified, push a trigger.
+    if (ValueArg == NULL)
+    {
+        admin_PushTrigger(PathArg, IO_NOW);
+    }
+    else if (UseJsonFormat)
+    {
+        admin_PushJson(PathArg, IO_NOW, ValueArg);
+    }
+    else if (strcmp("true", ValueArg) == 0)
+    {
+        admin_PushBoolean(PathArg, IO_NOW, true);
+    }
+    else if (strcmp("false", ValueArg) == 0)
+    {
+        admin_PushBoolean(PathArg, IO_NOW, false);
+    }
+    else
+    {
+        // Try parsing as a number.
+        double number = ParseDouble(ValueArg);
+        if (errno == 0)
+        {
+            admin_PushNumeric(PathArg, IO_NOW, number);
+        }
+        // If that didn't work, treat as a string.
+        else
+        {
+            admin_PushString(PathArg, IO_NOW, ValueArg);
+        }
+    }
 }
 
 
@@ -1244,6 +1299,16 @@ static void PathArgHandler
         PathArg = ValidateAbsolutePath(arg);
         return;
     }
+    else if (Action == ACTION_PUSH)
+    {
+        PathArg = ValidateAbsolutePath(arg);
+
+        // PATH arg is followed by an optional VALUE arg.
+        le_arg_AddPositionalCallback(ValueArgHandler);
+        le_arg_AllowLessPositionalArgsThanCallbacks();
+
+        return;
+    }
 
     switch (Object)
     {
@@ -1417,6 +1482,14 @@ static void CommandArgHandler
 
         // Expect an object type argument ("source", "default" or "override").
         le_arg_AddPositionalCallback(ObjectTypeArgHandler);
+    }
+    else if (strcmp(arg, "push") == 0)
+    {
+        Action = ACTION_PUSH;
+
+        // Expect a path argument and optional --json (-j) flag.
+        le_arg_AddPositionalCallback(PathArgHandler);
+        le_arg_SetFlagVar(&UseJsonFormat, "j", "json");
     }
     else if (strcmp(arg, "remove") == 0)
     {
@@ -1616,6 +1689,11 @@ COMPONENT_INIT
             }
 
             admin_EndUpdate();
+            break;
+
+        case ACTION_PUSH:
+
+            Push();
             break;
 
         case ACTION_REMOVE:
