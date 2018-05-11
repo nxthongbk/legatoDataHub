@@ -29,6 +29,8 @@ processes:
     {
         dataHub = ( hubd )
     }
+
+    faultAction: restart
 }
 
 extern:
