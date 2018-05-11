@@ -31,16 +31,20 @@ typedef struct DataSample
     {
         bool boolean;
         double numeric;
-        char* stringPtr;   ///< Ptr to string pool block containing null-terminated string.
+        char string[0]; ///< A string type data sample has space for the array after this struct.
     } value;
 }
 DataSample_t;
 
-/// Pool of Data Sample objects.
+/// The number of bytes to allocate in a String Data Sample Pool block.
+#define STRING_SAMPLE_OBJECT_BYTES (sizeof(DataSample_t) + HUB_MAX_STRING_BYTES - sizeof(double))
+
+
+/// Pool of Data Sample objects that don't hold strings.
 static le_mem_PoolRef_t DataSamplePool = NULL;
 
-/// Pool of string objects.
-static le_mem_PoolRef_t StringPool = NULL;
+/// Pool of Data Sample objects that hold strings.
+static le_mem_PoolRef_t StringDataSamplePool = NULL;
 
 
 
@@ -57,7 +61,7 @@ void dataSample_Init
 {
     DataSamplePool = le_mem_CreatePool("Data Sample", sizeof(DataSample_t));
 
-    StringPool = le_mem_CreatePool("String", HUB_MAX_STRING_BYTES);
+    StringDataSamplePool = le_mem_CreatePool("String Data Sample", STRING_SAMPLE_OBJECT_BYTES);
 }
 
 
@@ -72,11 +76,12 @@ void dataSample_Init
 //--------------------------------------------------------------------------------------------------
 static inline DataSample_t* CreateSample
 (
+    le_mem_PoolRef_t pool,  ///< Pool to allocate the object from.
     Timestamp_t timestamp
 )
 //--------------------------------------------------------------------------------------------------
 {
-    DataSample_t* samplePtr = le_mem_ForceAlloc(DataSamplePool);
+    DataSample_t* samplePtr = le_mem_ForceAlloc(pool);
 
     if (timestamp == IO_NOW)
     {
@@ -105,8 +110,7 @@ dataSample_Ref_t dataSample_CreateTrigger
 )
 //--------------------------------------------------------------------------------------------------
 {
-    DataSample_t* samplePtr = CreateSample(timestamp);
-    samplePtr->value.stringPtr = NULL; // just in case someone tries to dereference this by mistake
+    DataSample_t* samplePtr = CreateSample(DataSamplePool, timestamp);
 
     return samplePtr;
 }
@@ -128,7 +132,7 @@ dataSample_Ref_t dataSample_CreateBoolean
 )
 //--------------------------------------------------------------------------------------------------
 {
-    DataSample_t* samplePtr = CreateSample(timestamp);
+    DataSample_t* samplePtr = CreateSample(DataSamplePool, timestamp);
     samplePtr->value.boolean = value;
 
     return samplePtr;
@@ -151,7 +155,7 @@ dataSample_Ref_t dataSample_CreateNumeric
 )
 //--------------------------------------------------------------------------------------------------
 {
-    DataSample_t* samplePtr = CreateSample(timestamp);
+    DataSample_t* samplePtr = CreateSample(DataSamplePool, timestamp);
     samplePtr->value.numeric = value;
 
     return samplePtr;
@@ -176,10 +180,9 @@ dataSample_Ref_t dataSample_CreateString
 )
 //--------------------------------------------------------------------------------------------------
 {
-    DataSample_t* samplePtr = CreateSample(timestamp);
-    samplePtr->value.stringPtr = le_mem_ForceAlloc(StringPool);
+    DataSample_t* samplePtr = CreateSample(StringDataSamplePool, timestamp);
 
-    if (LE_OK != le_utf8_Copy(samplePtr->value.stringPtr, value, HUB_MAX_STRING_BYTES, NULL))
+    if (LE_OK != le_utf8_Copy(samplePtr->value.string, value, HUB_MAX_STRING_BYTES, NULL))
     {
         LE_FATAL("String value longer than max permitted size of %d", HUB_MAX_STRING_BYTES);
     }
@@ -282,7 +285,7 @@ const char* dataSample_GetString
 )
 //--------------------------------------------------------------------------------------------------
 {
-    return sampleRef->value.stringPtr;
+    return sampleRef->value.string;
 }
 
 
@@ -303,7 +306,7 @@ const char* dataSample_GetJson
 {
     // The data type is not actually stored in the data sample itself, and
     // JSON values are stored in the same way that strings are.
-    return sampleRef->value.stringPtr;
+    return sampleRef->value.string;
 }
 
 
@@ -327,7 +330,7 @@ const le_result_t dataSample_ConvertToString
 {
     if (dataType == IO_DATA_TYPE_STRING)
     {
-        return le_utf8_Copy(valueBuffPtr, sampleRef->value.stringPtr, valueBuffSize, NULL);
+        return le_utf8_Copy(valueBuffPtr, sampleRef->value.string, valueBuffSize, NULL);
     }
     else
     {
@@ -410,7 +413,7 @@ const le_result_t dataSample_ConvertToJson
             valueBuffPtr[0] = '"';
             valueBuffPtr++;
             valueBuffSize--;
-            result = le_utf8_Copy(valueBuffPtr, sampleRef->value.stringPtr, valueBuffSize, &len);
+            result = le_utf8_Copy(valueBuffPtr, sampleRef->value.string, valueBuffSize, &len);
             if ((result != LE_OK) || (len >= (valueBuffSize - 1)))  // need 1 more for the last '"'
             {
                 return LE_OVERFLOW;
@@ -422,7 +425,7 @@ const le_result_t dataSample_ConvertToJson
         case IO_DATA_TYPE_JSON:
 
             // Already in JSON format, just copy it into the buffer.
-            return le_utf8_Copy(valueBuffPtr, sampleRef->value.stringPtr, valueBuffSize, NULL);
+            return le_utf8_Copy(valueBuffPtr, sampleRef->value.string, valueBuffSize, NULL);
     }
 
     LE_FATAL("Invalid data type %d.", dataType);
@@ -443,14 +446,20 @@ dataSample_Ref_t dataSample_Copy
 )
 //--------------------------------------------------------------------------------------------------
 {
-    dataSample_Ref_t duplicate = le_mem_ForceAlloc(DataSamplePool);
-
-    memcpy(duplicate, original, sizeof(DataSample_t));
+    le_mem_PoolRef_t pool;
 
     if ((dataType == IO_DATA_TYPE_STRING) || (dataType == IO_DATA_TYPE_JSON))
     {
-        le_mem_AddRef(duplicate->value.stringPtr);
+        pool = StringDataSamplePool;
     }
+    else
+    {
+        pool = DataSamplePool;
+    }
+
+    dataSample_Ref_t duplicate = le_mem_ForceAlloc(pool);
+
+    memcpy(duplicate, original, le_mem_GetObjectSize(pool));
 
     return duplicate;
 }
