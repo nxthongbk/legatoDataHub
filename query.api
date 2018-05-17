@@ -107,7 +107,7 @@ FUNCTION le_result_t ReadBufferJson
                           ///< (if startafter > 30 years).
                           ///< Use NAN (not a number) to read the whole buffer.
     file outputFile IN, ///< File descriptor to write the data to.
-    handler ReadCompletion IN ///< Completion callback to be called when operation finishes.
+    ReadCompletion completionFunc IN ///< Completion callback to be called when operation finishes.
 );
 
 

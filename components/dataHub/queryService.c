@@ -85,7 +85,7 @@ le_result_t query_ReadBufferJson
         ///< Use NAN (not a number) to read the whole buffer.
     int outputFile,
         ///< [IN] File descriptor to write the data to.
-    query_ReadCompletionFunc_t handlerPtr,
+    query_ReadCompletionFunc_t completionFuncPtr,
         ///< [IN] Completion callback to be called when operation finishes.
     void* contextPtr
         ///< [IN]
@@ -105,7 +105,7 @@ le_result_t query_ReadBufferJson
         return LE_OK;   // Doesn't matter what we return.
     }
 
-    resTree_ReadBufferJson(entryRef, startAfter, outputFile, handlerPtr, contextPtr);
+    resTree_ReadBufferJson(entryRef, startAfter, outputFile, completionFuncPtr, contextPtr);
 
     return LE_OK;
 }
