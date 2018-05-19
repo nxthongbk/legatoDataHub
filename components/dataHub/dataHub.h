@@ -61,4 +61,17 @@ const char* hub_GetEntryTypeName
 );
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the client app's namespace.
+ *
+ * @return the reference to the namespace resource tree entry or NULL if failed.
+ */
+//--------------------------------------------------------------------------------------------------
+resTree_EntryRef_t hub_GetClientNamespace
+(
+    le_msg_SessionRef_t sessionRef  ///< IPC session reference.
+);
+
+
 #endif // DATA_HUB_H_INCLUDE_GUARD

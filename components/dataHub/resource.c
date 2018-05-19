@@ -80,6 +80,29 @@ static bool CanGetThereFromHere
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Figure out whether values of a given data type are acceptable for a given resource.
+ *
+ * @return true if acceptable.  false if should be ignored.
+ */
+//--------------------------------------------------------------------------------------------------
+static bool IsAcceptable
+(
+    res_Resource_t* resPtr,
+    io_DataType_t dataType
+)
+//--------------------------------------------------------------------------------------------------
+{
+    admin_EntryType_t entryType = resTree_GetEntryType(resPtr->entryRef);
+
+    // Inputs and Outputs are fixed-type, so the data type must match for those types of resource.
+    // Other types of resources (Observations and Placeholders) will accept any type of data.
+    return (   ((entryType != ADMIN_ENTRY_TYPE_INPUT) && (entryType != ADMIN_ENTRY_TYPE_OUTPUT))
+            || (dataType == ioPoint_GetDataType(resPtr))  );
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Constructor for the Resource base class.
  *
  * @warning This is only for use by sub-classes (obs.c and ioPoint.c).
@@ -104,6 +127,7 @@ void res_Construct
     resPtr->overrideValue = NULL;
     resPtr->defaultValue = NULL;
     resPtr->pushHandlerList = LE_DLS_LIST_INIT;
+    resPtr->jsonExample = NULL;
 }
 
 
@@ -276,6 +300,13 @@ void res_Destruct
     }
 
     handler_RemoveAll(&resPtr->pushHandlerList);
+
+    if (resPtr->jsonExample != NULL)
+    {
+        LE_WARN("Resource had a JSON example value.");
+        le_mem_Release(resPtr->jsonExample);
+        resPtr->jsonExample = NULL;
+    }
 }
 
 
@@ -388,6 +419,13 @@ le_result_t res_SetSource
             srcPtr->isConfigChanging = true;
             destPtr->isConfigChanging = true;
         }
+
+        // Propagate the source's JSON example value, if it has one and this resource accepts JSON.
+        if ((srcPtr->jsonExample != NULL) && IsAcceptable(destPtr, IO_DATA_TYPE_JSON))
+        {
+            le_mem_AddRef(srcPtr->jsonExample);
+            res_SetJsonExample(destPtr, srcPtr->jsonExample);
+        }
     }
 
     return LE_OK;
@@ -433,6 +471,21 @@ static void UpdateCurrentValue
 )
 //--------------------------------------------------------------------------------------------------
 {
+    admin_EntryType_t entryType = resTree_GetEntryType(resPtr->entryRef);
+
+    // Check for type mismatches and filter them out.
+    if (!IsAcceptable(resPtr, dataType))
+    {
+        LE_WARN("Type mismatch: Ignoring '%s' for '%s' resource of type '%s'.",
+                hub_GetDataTypeName(dataType),
+                hub_GetEntryTypeName(entryType),
+                hub_GetDataTypeName(ioPoint_GetDataType(resPtr)));
+
+        le_mem_Release(dataSample);
+
+        return;
+    }
+
     // Set the current value to the new data sample.
     if (resPtr->currentValue != NULL)
     {
@@ -440,6 +493,23 @@ static void UpdateCurrentValue
     }
     resPtr->currentType = dataType;
     resPtr->currentValue = dataSample;
+
+    // If data type is JSON and there isn't a JSON example value for this resource yet,
+    // then make this the JSON example value.
+    if (dataType == IO_DATA_TYPE_JSON)
+    {
+        if (resPtr->jsonExample == NULL)
+        {
+            le_mem_AddRef(dataSample);
+            resPtr->jsonExample = dataSample;
+        }
+    }
+    // If the data type is not JSON, drop any existing JSON example value.
+    else if (resPtr->jsonExample != NULL)
+    {
+        le_mem_Release(resPtr->jsonExample);
+        resPtr->jsonExample = NULL;
+    }
 
     // Iterate over the list of destination routes, pushing to all of them.
     le_dls_Link_t* linkPtr = le_dls_Peek(&(resPtr->destList));
@@ -455,24 +525,10 @@ static void UpdateCurrentValue
         linkPtr = le_dls_PeekNext(&(resPtr->destList), linkPtr);
     }
 
-    // Take futher action by calling the sub-class's processing function.
-    switch (resTree_GetEntryType(resPtr->entryRef))
+    // If an Observation, do additional processing, if applicable.
+    if (entryType == ADMIN_ENTRY_TYPE_OBSERVATION)
     {
-        case ADMIN_ENTRY_TYPE_OBSERVATION:
-
-            obs_ProcessAccepted(resPtr, dataType, dataSample);
-            break;
-
-        case ADMIN_ENTRY_TYPE_INPUT:
-        case ADMIN_ENTRY_TYPE_OUTPUT:
-        case ADMIN_ENTRY_TYPE_PLACEHOLDER:
-
-            // No additional processing beyond calling registered push handlers.
-            break;
-
-        default:
-            LE_FATAL("Unexpected entry type.");
-            break;
+        obs_ProcessAccepted(resPtr, dataType, dataSample);
     }
 
     // Call any the push handlers that match the data type of the sample.
@@ -505,6 +561,7 @@ void res_Push
     {
         le_mem_Release(resPtr->pushedValue);
     }
+    le_mem_AddRef(dataSample);
     resPtr->pushedValue = dataSample;
     resPtr->pushedType = dataType;
 
@@ -529,7 +586,10 @@ void res_Push
 
             case ADMIN_ENTRY_TYPE_OBSERVATION:
 
-                accepted = obs_ShouldAccept(resPtr, dataType, dataSample);
+                // Do JSON extraction (if applicable) before asking if the result should be
+                // accepted.
+                accepted = (   obs_DoJsonExtraction(resPtr, &dataType, &dataSample)
+                            && obs_ShouldAccept(resPtr, dataType, dataSample)  );
                 break;
 
             case ADMIN_ENTRY_TYPE_PLACEHOLDER:
@@ -543,7 +603,11 @@ void res_Push
         }
     }
 
-    if (accepted)
+    if (!accepted)
+    {
+        le_mem_Release(dataSample);
+    }
+    else
     {
         // If the destination resource is a trigger type Input or Output and the pushed sample
         // is not a trigger, then create a new trigger sample with the same timestamp as the
@@ -557,20 +621,16 @@ void res_Push
             dataType = IO_DATA_TYPE_TRIGGER;
         }
         // If an override is in effect, the current value becomes a new data sample that has
-        // the same timestamp as the pushed sample but the override's value.
-        else if (resPtr->overrideValue != NULL)
+        // the same timestamp as the pushed sample but the override's value (and we drop the
+        // original sample).
+        else if (res_IsOverridden(resPtr))
         {
             dataSample_Ref_t overrideSample = dataSample_Copy(resPtr->overrideType,
                                                               resPtr->overrideValue);
             dataSample_SetTimestamp(overrideSample, dataSample_GetTimestamp(dataSample));
             dataType = resPtr->overrideType;
+            le_mem_Release(dataSample);
             dataSample = overrideSample;
-        }
-        else
-        {
-            // If we're using the pushed sample as the next current value, then
-            // increment the reference count.
-            le_mem_AddRef(dataSample);
         }
 
         // If the units were provided, and this is an Observation or a Placeholder
@@ -756,6 +816,13 @@ static void DropSettings
     {
         le_mem_Release(resPtr->defaultValue);
         resPtr->defaultValue = NULL;
+    }
+
+    // Drop the JSON example value
+    if (resPtr->jsonExample != NULL)
+    {
+        le_mem_Release(resPtr->jsonExample);
+        resPtr->jsonExample = NULL;
     }
 }
 
@@ -1062,29 +1129,28 @@ void res_SetDefault
 )
 //--------------------------------------------------------------------------------------------------
 {
-    admin_EntryType_t entryType = resTree_GetEntryType(resPtr->entryRef);
-
-    if (   ((entryType == ADMIN_ENTRY_TYPE_INPUT) || (entryType == ADMIN_ENTRY_TYPE_OUTPUT))
-        && (dataType != res_GetDataType(resPtr))   )
+    if (resPtr->defaultValue != NULL)
     {
-        LE_WARN("Discarding default: type mismatch.");
-        le_mem_Release(value);
+        le_mem_Release(resPtr->defaultValue);
+    }
+
+    resPtr->defaultValue = value;
+    resPtr->defaultType = dataType;
+
+    if (!IsAcceptable(resPtr, dataType))
+    {
+        LE_WARN("Setting default value to incompatible data type %s on resource of type %s.",
+                hub_GetDataTypeName(dataType),
+                hub_GetDataTypeName(resPtr->currentType));
     }
     else
     {
-        if (resPtr->defaultValue != NULL)
-        {
-            le_mem_Release(resPtr->defaultValue);
-        }
-
-        resPtr->defaultValue = value;
-        resPtr->defaultType = dataType;
-
         // If this resource is currently operating on its default value
-        // (doesn't have an override or anything pushed to it), update
+        // (doesn't have a compatible override or pushed value), update
         // the current value to this value.
-        if (   (resPtr->overrideValue == NULL)
-            && ((resPtr->pushedValue == NULL) || (resPtr->srcPtr == NULL))  )
+        if (   (!res_IsOverridden(resPtr))
+            && (   (resPtr->pushedValue == NULL)
+                || (!IsAcceptable(resPtr, resPtr->pushedType))  )  )
         {
             le_mem_AddRef(value);
             UpdateCurrentValue(resPtr, dataType, value);
@@ -1183,24 +1249,21 @@ void res_SetOverride
 )
 //--------------------------------------------------------------------------------------------------
 {
-    admin_EntryType_t entryType = resTree_GetEntryType(resPtr->entryRef);
-
-    // Inputs and Outputs have fixed types specified by the apps that create them.
-    // Reject any override that is of a different type if this is an Input or Output.
-    if (   ((entryType == ADMIN_ENTRY_TYPE_INPUT) || (entryType == ADMIN_ENTRY_TYPE_OUTPUT))
-        && (dataType != ioPoint_GetDataType(resPtr))  )
+    if (resPtr->overrideValue != NULL)
     {
-        LE_WARN("Ignoring override: data type mismatch.");
+        le_mem_Release(resPtr->overrideValue);
+    }
+    resPtr->overrideValue = value;
+    resPtr->overrideType = dataType;
+
+    if (!IsAcceptable(resPtr, dataType))
+    {
+        LE_WARN("Setting override to incompatible data type %s on resource of type %s.",
+                hub_GetDataTypeName(dataType),
+                hub_GetDataTypeName(resPtr->currentType));
     }
     else
     {
-        if (resPtr->overrideValue != NULL)
-        {
-            le_mem_Release(resPtr->overrideValue);
-        }
-        resPtr->overrideValue = value;
-        resPtr->overrideType = dataType;
-
         // Update the current value to this value now.
         le_mem_AddRef(value);
         UpdateCurrentValue(resPtr, dataType, value);
@@ -1210,9 +1273,29 @@ void res_SetOverride
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Find out whether the resource currently has an override set.
+ *
+ * @return true if the resource has an override set, false otherwise.
+ */
+//--------------------------------------------------------------------------------------------------
+bool res_HasOverride
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return (resPtr->overrideValue != NULL);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Find out whether the resource currently has an override in effect.
  *
  * @return true if the resource is overridden, false otherwise.
+ *
+ * @note It's possible for a resource to have an override but not be overridden.  This happens when
+ *       the override is the wrong data type for the resource.
  */
 //--------------------------------------------------------------------------------------------------
 bool res_IsOverridden
@@ -1221,7 +1304,52 @@ bool res_IsOverridden
 )
 //--------------------------------------------------------------------------------------------------
 {
-    return (resPtr->overrideValue != NULL);
+    admin_EntryType_t entryType = resTree_GetEntryType(resPtr->entryRef);
+
+    // Input and Output resources have a fixed data type, so the override is ignored
+    // if the override's data type doesn't match the Input or Output resource's data type.
+    // Otherwise, if the resource has an override, it is overridden.
+    return (   (resPtr->overrideValue != NULL)
+            && (   ((entryType != ADMIN_ENTRY_TYPE_INPUT) && (entryType != ADMIN_ENTRY_TYPE_OUTPUT))
+                || (resPtr->overrideType == ioPoint_GetDataType(resPtr))  )  );
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the data type of the override value that is currently set on a given resource.
+ *
+ * @return The data type, or IO_DATA_TYPE_TRIGGER if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+io_DataType_t res_GetOverrideDataType
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (resPtr->overrideValue == NULL)
+    {
+        return IO_DATA_TYPE_TRIGGER;
+    }
+    return resPtr->overrideType;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value of a resource.
+ *
+ * @return the override value or NULL if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t res_GetOverrideValue
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return resPtr->overrideValue;
 }
 
 
@@ -1242,13 +1370,13 @@ void res_RemoveOverride
         resPtr->overrideValue = NULL;
 
         // If the resource has a pushed value, update the current value to that.
-        if (resPtr->pushedValue != NULL)
+        if ((resPtr->pushedValue != NULL) && IsAcceptable(resPtr, resPtr->pushedType))
         {
             le_mem_AddRef(resPtr->pushedValue);
             UpdateCurrentValue(resPtr, resPtr->pushedType, resPtr->pushedValue);
         }
         // Otherwise, look for a default value,
-        else if (resPtr->defaultValue != NULL)
+        else if ((resPtr->defaultValue != NULL) && IsAcceptable(resPtr, resPtr->defaultType))
         {
             le_mem_AddRef(resPtr->defaultValue);
             UpdateCurrentValue(resPtr, resPtr->defaultType, resPtr->defaultValue);
@@ -1337,4 +1465,95 @@ void res_ReadBufferJson
 //--------------------------------------------------------------------------------------------------
 {
     obs_ReadBufferJson(resPtr, startAfter, outputFile, handlerPtr, contextPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON example value for a given resource.
+ */
+//--------------------------------------------------------------------------------------------------
+void res_SetJsonExample
+(
+    res_Resource_t* resPtr,
+    dataSample_Ref_t example
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (resPtr->jsonExample != NULL)
+    {
+        le_mem_Release(resPtr->jsonExample);
+    }
+
+    resPtr->jsonExample = example;
+
+    // Iterate over the list of destination routes, setting their JSON example values.
+    le_dls_Link_t* linkPtr = le_dls_Peek(&(resPtr->destList));
+    while (linkPtr != NULL)
+    {
+        res_Resource_t* destPtr = CONTAINER_OF(linkPtr, res_Resource_t, destListLink);
+
+        if (IsAcceptable(destPtr, IO_DATA_TYPE_JSON))
+        {
+            le_mem_AddRef(example);
+            res_SetJsonExample(destPtr, example);
+        }
+
+        linkPtr = le_dls_PeekNext(&(resPtr->destList), linkPtr);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON example value for a given resource.
+ *
+ * @return A reference to the example value or NULL if no example set.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t res_GetJsonExample
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return resPtr->jsonExample;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * If this is set, all non-JSON data will be ignored, and all JSON data that does not contain the
+ * the specified object member or array element will also be ignored.
+ */
+//--------------------------------------------------------------------------------------------------
+void res_SetJsonExtraction
+(
+    res_Resource_t* resPtr,  ///< Observation resource.
+    const char* extractionSpec    ///< [IN] string specifying the JSON member/element to extract.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    obs_SetJsonExtraction(resPtr, extractionSpec);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * @return Ptr to string containing JSON extraction specifier.  "" if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+const char* res_GetJsonExtraction
+(
+    res_Resource_t* resPtr  ///< Observation resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return obs_GetJsonExtraction(resPtr);
 }

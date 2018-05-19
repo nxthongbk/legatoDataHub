@@ -48,6 +48,7 @@ static enum
     OBJECT_CHANGE_BY,
     OBJECT_BUFFER_SIZE,
     OBJECT_BACKUP_PERIOD,
+    OBJECT_JSON_EXTRACTION,
     OBJECT_OBSERVATION,
 }
 Object;
@@ -88,6 +89,7 @@ static void HandleHelpRequest
         "    dhub set changeBy PATH\n"
         "    dhub set bufferSize PATH\n"
         "    dhub set backupPeriod PATH\n"
+        "    dhub set jsonExtraction PATH\n"
         "    dhub remove OBJECT PATH\n"
         "    dhub get OBJECT PATH\n"
         "    dhub push PATH [[--json] VALUE]\n"
@@ -155,6 +157,19 @@ static void HandleHelpRequest
         "            an Observation resource at PATH if one does not already exist\n"
         "            there.\n"
         "\n"
+        "    dhub set jsonExtraction PATH VALUE\n"
+        "            Specifies what an Observation should should extract from JSON\n"
+        "            values it receives.  PATH is expected to be under /obs/.\n"
+        "            Setting this will create an Observation resource at PATH if one\n"
+        "            does not already exist there.\n"
+        "\n"
+        "            The VALUE is JSON code, such as\n"
+        "              x\n"
+        "              x.y\n"
+        "              x.y[0]\n"
+        "              [0]\n"
+        "              [1].y\n"
+        "\n"
         "    dhub remove OBJECT PATH\n"
         "            Removes an OBJECT associated with the resource at PATH.\n"
         "            Valid values for OBJECT are the same as for 'dhub get', with\n"
@@ -172,6 +187,7 @@ static void HandleHelpRequest
         "              lowLimit\n"
         "              highLimit\n"
         "              changeBy\n"
+        "              jsonExtraction\n"
         "            For the source, default, and override objects, the PATH must be\n"
         "            absolute (beginning with '/'). The other objects are only found\n"
         "            on Observations, so their PATH can be relative to /obs/.\n"
@@ -532,6 +548,92 @@ static void PrintDefault
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Print the override value associated with a given resource.
+ */
+//--------------------------------------------------------------------------------------------------
+static void PrintOverride
+(
+    const char* path
+)
+//--------------------------------------------------------------------------------------------------
+{
+    io_DataType_t resDataType;
+    le_result_t result = query_GetDataType(path, &resDataType);
+    if (result != LE_OK)
+    {
+        fprintf(stderr, "** ERROR: Failed to get data type.\n");
+        return;
+    }
+
+    io_DataType_t overrideType = admin_GetOverrideDataType(path);
+
+    switch (overrideType)
+    {
+        case IO_DATA_TYPE_TRIGGER:
+
+            LE_FATAL("...a trigger?!\n"); // This should never happen.
+
+        case IO_DATA_TYPE_BOOLEAN:
+
+            if (admin_GetBooleanOverride(path))
+            {
+                printf("true");
+            }
+            else
+            {
+                printf("false");
+            }
+            break;
+
+        case IO_DATA_TYPE_NUMERIC:
+
+            printf("%lf", admin_GetNumericOverride(path));
+            break;
+
+        case IO_DATA_TYPE_STRING:
+        {
+            char string[IO_MAX_STRING_VALUE_LEN + 1];
+
+            result = admin_GetStringOverride(path, string, sizeof(string));
+            LE_ASSERT(result != LE_OVERFLOW);
+            if (result == LE_NOT_FOUND)
+            {
+                printf("unable to retrieve string value.");
+            }
+            else
+            {
+                printf("\"%s\"", string);
+            }
+            break;
+        }
+
+        case IO_DATA_TYPE_JSON:
+        {
+            char string[IO_MAX_STRING_VALUE_LEN + 1];
+
+            result = admin_GetJsonOverride(path, string, sizeof(string));
+            LE_ASSERT(result != LE_OVERFLOW);
+            if (result == LE_NOT_FOUND)
+            {
+                printf("unable to retrieve JSON value.");
+            }
+            else
+            {
+                printf("JSON: %s", string);
+            }
+            break;
+        }
+    }
+
+    if (resDataType != overrideType)
+    {
+        printf("  <-- WARNING: Override has different data type than resource.");
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Print out a numeric setting that is of type double (where NAN = "not set").
  */
 //--------------------------------------------------------------------------------------------------
@@ -614,6 +716,38 @@ static void PrintUnits
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Print a JSON extraction specification setting.
+ */
+//--------------------------------------------------------------------------------------------------
+static void PrintJsonExtractionSetting
+(
+    size_t depth,    ///< Indent this far.
+    const char* path
+)
+//--------------------------------------------------------------------------------------------------
+{
+    char spec[ADMIN_MAX_JSON_EXTRACTOR_LEN];
+
+    le_result_t result = admin_GetJsonExtraction(path, spec, sizeof(spec));
+
+    if (result == LE_OK)
+    {
+        Indent(depth);
+        printf("JSON extraction: %s\n", spec);
+    }
+    else if (result != LE_NOT_FOUND)
+    {
+        fprintf(stderr,
+                "**ERROR: Failed (%s) to get JSON extraction specification for '%s'.\n",
+                LE_RESULT_TXT(result),
+                path);
+        exit(EXIT_FAILURE);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Print the details of an entry in the resource tree at a given path.
  */
 //--------------------------------------------------------------------------------------------------
@@ -648,10 +782,12 @@ static void PrintEntry
 
         PrintUnits(path, depth);
 
-        if (admin_IsOverridden(path))
+        if (admin_HasOverride(path))
         {
             Indent(depth);
-            printf("** overridden **\n");
+            printf("** override = ");
+            PrintOverride(path);
+            putchar('\n');
         }
 
         if (admin_HasDefault(path))
@@ -689,20 +825,19 @@ static void PrintEntry
     // Observation
     if (entryType == ADMIN_ENTRY_TYPE_OBSERVATION)
     {
-        const char* obsPath = path + 5;  // Skip "/obs/" to convert to relative path.
-
+        PrintJsonExtractionSetting(depth, path);
         Indent(depth);
-        PrintDoubleSetting("minPeriod", admin_GetMinPeriod(obsPath));
+        PrintDoubleSetting("minPeriod", admin_GetMinPeriod(path));
         Indent(depth);
-        PrintDoubleSetting("lowLimit", admin_GetLowLimit(obsPath));
+        PrintDoubleSetting("lowLimit", admin_GetLowLimit(path));
         Indent(depth);
-        PrintDoubleSetting("highLimit", admin_GetHighLimit(obsPath));
+        PrintDoubleSetting("highLimit", admin_GetHighLimit(path));
         Indent(depth);
-        PrintDoubleSetting("changeBy", admin_GetChangeBy(obsPath));
+        PrintDoubleSetting("changeBy", admin_GetChangeBy(path));
         Indent(depth);
-        printf("bufferSize: %u entries\n", admin_GetBufferMaxCount(obsPath));
+        printf("bufferSize: %u entries\n", admin_GetBufferMaxCount(path));
         Indent(depth);
-        uint32_t backupPeriod = admin_GetBufferBackupPeriod(obsPath);
+        uint32_t backupPeriod = admin_GetBufferBackupPeriod(path);
         printf("backupPeriod: %u seconds (= %lf minutes) (= %lf hours)\n",
                backupPeriod,
                ((double)backupPeriod) / 60,
@@ -1098,7 +1233,7 @@ static void Push
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get the override for a resource.
+ * Print the override value of a given resource.
  */
 //--------------------------------------------------------------------------------------------------
 static void GetOverride
@@ -1107,9 +1242,10 @@ static void GetOverride
 )
 //--------------------------------------------------------------------------------------------------
 {
-    if (admin_IsOverridden(path))
+    if (admin_HasOverride(PathArg))
     {
-        printf("It's overridden, but can't tell to what until the Query API is implemented.\n");
+        PrintOverride(PathArg);
+        putchar('\n');
     }
 }
 
@@ -1325,6 +1461,7 @@ static void PathArgHandler
         case OBJECT_CHANGE_BY:
         case OBJECT_BUFFER_SIZE:
         case OBJECT_BACKUP_PERIOD:
+        case OBJECT_JSON_EXTRACTION:
         case OBJECT_OBSERVATION:
 
             PathArg = ValidateObservationPath(arg);
@@ -1382,6 +1519,10 @@ static void ObjectTypeArgHandler
     else if (strcmp(arg, "backupPeriod") == 0)
     {
         Object = OBJECT_BACKUP_PERIOD;
+    }
+    else if (strcmp(arg, "jsonExtraction") == 0)
+    {
+        Object = OBJECT_JSON_EXTRACTION;
     }
     else if ((strcmp(arg, "obs") == 0) || (strcmp(arg, "observation") == 0))
     {
@@ -1624,6 +1765,22 @@ COMPONENT_INIT
                     GetIntegerSetting(PathArg, admin_GetBufferBackupPeriod);
                     break;
 
+                case OBJECT_JSON_EXTRACTION:
+                {
+                    char spec[ADMIN_MAX_JSON_EXTRACTOR_LEN];
+                    le_result_t result = admin_GetJsonExtraction(PathArg, spec, sizeof(spec));
+                    if (result == LE_OK)
+                    {
+                        printf("%s\n", spec);
+                    }
+                    else
+                    {
+                        fprintf(stderr, "%s\n", LE_RESULT_TXT(result));
+                        exit(EXIT_FAILURE);
+                    }
+                    break;
+                }
+
                 case OBJECT_OBSERVATION:
 
                     fprintf(stderr, "Can't 'get' an Observation.\n");
@@ -1680,6 +1837,11 @@ COMPONENT_INIT
                 case OBJECT_BACKUP_PERIOD:
 
                     SetIntegerSetting(PathArg, ValueArg, admin_SetBufferBackupPeriod);
+                    break;
+
+                case OBJECT_JSON_EXTRACTION:
+
+                    admin_SetJsonExtraction(PathArg, ValueArg);
                     break;
 
                 case OBJECT_OBSERVATION:
@@ -1742,6 +1904,11 @@ COMPONENT_INIT
 
                     fprintf(stderr, "These cannot be removed. Do you mean to set them to zero?\n");
                     exit(EXIT_FAILURE);
+
+                case OBJECT_JSON_EXTRACTION:
+
+                    admin_SetJsonExtraction(PathArg, "");
+                    break;
 
                 case OBJECT_OBSERVATION:
 

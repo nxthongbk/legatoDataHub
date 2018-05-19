@@ -35,4 +35,5 @@ sources:
     ioPoint.c
     obs.c
     handler.c
+    json.c
 }

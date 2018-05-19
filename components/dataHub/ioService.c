@@ -44,57 +44,6 @@ static le_mem_PoolRef_t UpdateStartEndHandlerPool = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get the client app's namespace.
- *
- * @return the reference to the namespace resource tree entry or NULL if failed.
- */
-//--------------------------------------------------------------------------------------------------
-static resTree_EntryRef_t GetClientNamespace
-(
-    void
-)
-//--------------------------------------------------------------------------------------------------
-{
-    // See if we already looked up the app name, etc. and saved it as the IPC session context ptr.
-    le_msg_SessionRef_t sessionRef = io_GetClientSessionRef();
-    resTree_EntryRef_t nsRef = le_msg_GetSessionContextPtr(sessionRef);
-    if (nsRef != NULL)
-    {
-        return nsRef;
-    }
-
-    // Get the client app name.
-    pid_t clientPid;
-    le_result_t result = le_msg_GetClientProcessId(sessionRef, &clientPid);
-    if (result != LE_OK)
-    {
-        LE_KILL_CLIENT("Unable to retrieve client process ID (%s)", LE_RESULT_TXT(result));
-        return NULL;
-    }
-    char appName[LE_LIMIT_APP_NAME_LEN + 1];
-    result = le_appInfo_GetName(clientPid, appName, sizeof(appName));
-    if (result != LE_OK)
-    {
-        LE_KILL_CLIENT("Unable to retrieve client app name (%s)", LE_RESULT_TXT(result));
-        return NULL;
-    }
-
-    // Get the "/app" namespace first.
-    nsRef = resTree_GetEntry(resTree_GetRoot(), "app");
-
-    // Now get the app's namespace under the /app namespace.
-    nsRef = resTree_GetEntry(nsRef, appName);
-
-    // Store the namespace entry reference as the IPC session Context Ptr to speed things up
-    // next time.
-    le_msg_SetSessionContextPtr(sessionRef, nsRef);
-
-    return nsRef;
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Get the resource at a given path within the app's namespace.
  *
  * @return Reference to the entry, or NULL if not found.
@@ -106,7 +55,7 @@ static resTree_EntryRef_t FindResource
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_EntryRef_t entryRef = GetClientNamespace();
+    resTree_EntryRef_t entryRef = hub_GetClientNamespace(io_GetClientSessionRef());
     if (entryRef != NULL)
     {
         entryRef = resTree_FindEntry(entryRef, path);
@@ -153,7 +102,7 @@ le_result_t io_CreateInput
 
     resTree_EntryRef_t resRef = NULL;
 
-    resTree_EntryRef_t nsRef = GetClientNamespace();
+    resTree_EntryRef_t nsRef = hub_GetClientNamespace(io_GetClientSessionRef());
 
     // Check for another resource having the same name in the same namespace.
     if (nsRef != NULL)
@@ -208,6 +157,47 @@ le_result_t io_CreateInput
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Set the example value for a JSON-type Input resource.
+ *
+ * Does nothing if the resource is not found, is not an input, or doesn't have a JSON type.
+ */
+//--------------------------------------------------------------------------------------------------
+void io_SetJsonExample
+(
+    const char* path,
+        ///< [IN] Path within the client app's resource namespace.
+    const char* example
+        ///< [IN] The example JSON value string.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resRef = FindResource(path);
+    if (resRef == NULL)
+    {
+        LE_ERROR("Resource '%s' does not exist.", path);
+    }
+    else if (resTree_GetEntryType(resRef) != ADMIN_ENTRY_TYPE_INPUT)
+    {
+        LE_ERROR("Resource '%s' is not an input.", path);
+    }
+    else if (resTree_GetDataType(resRef) != IO_DATA_TYPE_JSON)
+    {
+        LE_ERROR("Resource '%s' does not have JSON data type.", path);
+    }
+    else
+    {
+        dataSample_Ref_t sampleRef = dataSample_CreateJson(0, example);
+
+        if (sampleRef != NULL)
+        {
+            resTree_SetJsonExample(resRef, sampleRef);
+        }
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Create an output resource, which is used to push data into the Data Hub.
  *
  * Does nothing if the resource already exists.
@@ -233,7 +223,7 @@ le_result_t io_CreateOutput
 
     resTree_EntryRef_t resRef = NULL;
 
-    resTree_EntryRef_t nsRef = GetClientNamespace();
+    resTree_EntryRef_t nsRef = hub_GetClientNamespace(io_GetClientSessionRef());
 
     // Check for another resource having the same name in the same namespace.
     if (nsRef != NULL)
@@ -489,7 +479,7 @@ static hub_HandlerRef_t AddPushHandler
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_EntryRef_t nsRef = GetClientNamespace();
+    resTree_EntryRef_t nsRef = hub_GetClientNamespace(io_GetClientSessionRef());
     if (nsRef == NULL)
     {
         LE_KILL_CLIENT("Client tried to register a push handler before creating any resources.");

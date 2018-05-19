@@ -41,6 +41,7 @@ typedef struct res_Resource
     io_DataType_t defaultType;///< Data type of the default value, if defaultRef != NULL.
     bool isConfigChanging;  ///< true if filter or routing is being changed.
     le_dls_List_t pushHandlerList;  ///< List of Push Handler callbacks registered on this resource.
+    dataSample_Ref_t jsonExample; ///< Ref to JSON example value; NULL if not set.
 }
 res_Resource_t;
 
@@ -608,12 +609,54 @@ void res_SetOverride
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Find out whether the resource currently has an override set.
+ *
+ * @return true if the resource has an override set, false otherwise.
+ */
+//--------------------------------------------------------------------------------------------------
+bool res_HasOverride
+(
+    res_Resource_t* resPtr
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Find out whether the resource currently has an override in effect.
  *
  * @return true if the resource is overridden, false otherwise.
+ *
+ * @note It's possible for a resource to have an override but not be overridden.  This happens when
+ *       the override is the wrong data type for the resource.
  */
 //--------------------------------------------------------------------------------------------------
 bool res_IsOverridden
+(
+    res_Resource_t* resPtr
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the data type of the override value that is currently set on a given resource.
+ *
+ * @return The data type, or IO_DATA_TYPE_TRIGGER if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+io_DataType_t res_GetOverrideDataType
+(
+    res_Resource_t* resPtr
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value of a resource.
+ *
+ * @return the override value or NULL if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t res_GetOverrideValue
 (
     res_Resource_t* resPtr
 );
@@ -678,6 +721,61 @@ void res_ReadBufferJson
     int outputFile, ///< File descriptor to write the data to.
     query_ReadCompletionFunc_t handlerPtr, ///< Completion callback.
     void* contextPtr    ///< Value to be passed to completion callback.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON example value for a given resource.
+ */
+//--------------------------------------------------------------------------------------------------
+void res_SetJsonExample
+(
+    res_Resource_t* resPtr,
+    dataSample_Ref_t example
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON example value for a given resource.
+ *
+ * @return A reference to the example value or NULL if no example set.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t res_GetJsonExample
+(
+    res_Resource_t* resPtr
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * If this is set, all non-JSON data will be ignored, and all JSON data that does not contain the
+ * the specified object member or array element will also be ignored.
+ */
+//--------------------------------------------------------------------------------------------------
+void res_SetJsonExtraction
+(
+    res_Resource_t* resPtr,  ///< Observation resource.
+    const char* extractionSpec    ///< [IN] string specifying the JSON member/element to extract.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * @return Ptr to string containing JSON extraction specifier.  "" if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+const char* res_GetJsonExtraction
+(
+    res_Resource_t* resPtr  ///< Observation resource.
 );
 
 

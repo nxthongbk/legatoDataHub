@@ -26,8 +26,10 @@
  *  - query_GetJson() - get the current value of the resource in JSON format (with any data type)
  *
  * All Observations that have non-zero buffer sizes with any type of data in them can have
- * data fetched from their buffers in JSON format using
- *  - query_ReadBufferJson()
+ * data fetched from their buffers in JSON format using query_ReadBufferJson().
+ *
+ * If a JSON-type Input resource has provided an example of what its data samples might look like,
+ * it can be fetched using query_GetJsonExample().
  *
  *
  * @section c_dataHubQuery_Statistics Data Set Statistics
@@ -332,4 +334,25 @@ FUNCTION le_result_t GetJson
                                               ///< the calling app (/app/<app-name>/).
     double timestamp OUT, ///< Fetched timestamp (in seconds since the Epoch), if LE_OK returned.
     string value[io.MAX_STRING_VALUE_LEN] OUT  ///< Fetched value, if LE_OK returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fetch the example JSON value string for a given Input resource.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the resource was not found.
+ *  - LE_UNSUPPORTED if the path refers to something that doesn't have a JSON type.
+ *  - LE_UNAVAILABLE if the JSON-type resource doesn't have an example value.
+ *  - LE_OVERFLOW if the value was truncated because it is larger than the buffer provided.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetJsonExample
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Resource path. Can be absolute (beginning
+                                              ///< with a '/') or relative to the namespace of
+                                              ///< the calling app (/app/<app-name>/).
+    string example[io.MAX_STRING_VALUE_LEN] OUT ///< Example will be put here, if LE_OK returned.
 );

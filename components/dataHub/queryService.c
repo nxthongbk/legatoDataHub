@@ -236,6 +236,47 @@ double query_GetStdDev
 }
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Find a resource at a given path.  The path can be absolute (beginning with a '/'), or relative
+ * to the calling app's namespace.
+ *
+ * @return Reference to the resource or NULL if not found.
+ */
+//--------------------------------------------------------------------------------------------------
+static resTree_EntryRef_t FindResource
+(
+    const char* path
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entryRef;
+
+    if (path[0] == '/')
+    {
+        entryRef = resTree_FindEntryAtAbsolutePath(path);
+    }
+    else
+    {
+        entryRef = hub_GetClientNamespace(query_GetClientSessionRef());
+
+        if (entryRef != NULL)
+        {
+            entryRef = resTree_FindEntry(entryRef, path);
+
+            if ((entryRef != NULL) && (!resTree_IsResource(entryRef)))
+            {
+                LE_DEBUG("Entry '%s' is not a resource (it's a %s).",
+                         path,
+                         hub_GetEntryTypeName(resTree_GetEntryType(entryRef)));
+                entryRef = NULL;
+            }
+        }
+    }
+
+    return entryRef;
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -262,7 +303,7 @@ le_result_t query_GetDataType
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_EntryRef_t entryRef = resTree_FindEntryAtAbsolutePath(path);
+    resTree_EntryRef_t entryRef = FindResource(path);
 
     if (entryRef == NULL)
     {
@@ -308,7 +349,7 @@ le_result_t query_GetUnits
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_EntryRef_t entryRef = resTree_FindEntryAtAbsolutePath(path);
+    resTree_EntryRef_t entryRef = FindResource(path);
 
     if (entryRef == NULL)
     {
@@ -348,7 +389,7 @@ le_result_t query_GetTimestamp
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_EntryRef_t entryRef = resTree_FindEntryAtAbsolutePath(path);
+    resTree_EntryRef_t entryRef = FindResource(path);
 
     if (entryRef == NULL)
     {
@@ -402,7 +443,7 @@ le_result_t query_GetBoolean
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_EntryRef_t entryRef = resTree_FindEntryAtAbsolutePath(path);
+    resTree_EntryRef_t entryRef = FindResource(path);
 
     if (entryRef == NULL)
     {
@@ -462,7 +503,7 @@ le_result_t query_GetNumeric
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_EntryRef_t entryRef = resTree_FindEntryAtAbsolutePath(path);
+    resTree_EntryRef_t entryRef = FindResource(path);
 
     if (entryRef == NULL)
     {
@@ -525,7 +566,7 @@ le_result_t query_GetString
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_EntryRef_t entryRef = resTree_FindEntryAtAbsolutePath(path);
+    resTree_EntryRef_t entryRef = FindResource(path);
 
     if (entryRef == NULL)
     {
@@ -585,7 +626,7 @@ le_result_t query_GetJson
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_EntryRef_t entryRef = resTree_FindEntryAtAbsolutePath(path);
+    resTree_EntryRef_t entryRef = FindResource(path);
 
     if (entryRef == NULL)
     {
@@ -619,4 +660,52 @@ le_result_t query_GetJson
             }
         }
     }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fetch the example JSON value string for a given Input resource.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the resource was not found.
+ *  - LE_UNSUPPORTED if the path refers to something that doesn't have a JSON type.
+ *  - LE_UNAVAILABLE if the JSON-type resource doesn't have an example value.
+ *  - LE_OVERFLOW if the value was truncated because it is larger than the buffer provided.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t query_GetJsonExample
+(
+    const char* path,
+        ///< [IN] Resource path. Can be absolute (beginning
+        ///< with a '/') or relative to the namespace of
+        ///< the calling app (/app/<app-name>/).
+    char* example,
+        ///< [OUT] Example will be put here, if LE_OK returned.
+    size_t exampleSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entryRef = FindResource(path);
+
+    if (entryRef == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    if (!resTree_IsResource(entryRef) || (resTree_GetDataType(entryRef) != IO_DATA_TYPE_JSON))
+    {
+        return LE_UNSUPPORTED;
+    }
+
+    dataSample_Ref_t sampleRef = resTree_GetJsonExample(entryRef);
+
+    if (sampleRef != NULL)
+    {
+        return le_utf8_Copy(example, dataSample_GetJson(sampleRef), exampleSize, NULL);
+    }
+
+    return LE_UNAVAILABLE;
 }

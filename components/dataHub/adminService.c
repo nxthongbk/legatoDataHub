@@ -429,7 +429,9 @@ le_result_t admin_SetSource
     {
         return LE_BAD_PARAMETER;
     }
+
     resTree_EntryRef_t srcEntry = resTree_GetResource(resTree_GetRoot(), srcPath);
+
     if (srcEntry == NULL)
     {
         return LE_BAD_PARAMETER;
@@ -510,8 +512,9 @@ void admin_RemoveSource
 )
 //--------------------------------------------------------------------------------------------------
 {
-    resTree_EntryRef_t destEntry = resTree_GetResource(resTree_GetRoot(), destPath);
-    if (destEntry != NULL)
+    resTree_EntryRef_t destEntry = resTree_FindEntry(resTree_GetRoot(), destPath);
+
+    if ((destEntry != NULL) && resTree_IsResource(destEntry))
     {
         resTree_SetSource(destEntry, NULL);
     }
@@ -567,7 +570,15 @@ static resTree_EntryRef_t FindObservation
         return NULL;
     }
 
-    return resTree_FindEntry(GetObsNamespace(), path);
+    resTree_EntryRef_t entryRef = resTree_FindEntry(GetObsNamespace(), path);
+
+    if (resTree_GetEntryType(entryRef) != ADMIN_ENTRY_TYPE_OBSERVATION)
+    {
+        LE_WARN("Entry '%s' is not an Observation.", path);
+        return NULL;
+    }
+
+    return entryRef;
 }
 
 
@@ -668,7 +679,7 @@ double admin_GetMinPeriod
 {
     resTree_EntryRef_t resEntry = FindObservation(path);
 
-    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    if (resEntry == NULL)
     {
         return 0;
     }
@@ -724,7 +735,7 @@ double admin_GetHighLimit
 {
     resTree_EntryRef_t resEntry = FindObservation(path);
 
-    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    if (resEntry == NULL)
     {
         return NAN;
     }
@@ -780,7 +791,7 @@ double admin_GetLowLimit
 {
     resTree_EntryRef_t resEntry = FindObservation(path);
 
-    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    if (resEntry == NULL)
     {
         return NAN;
     }
@@ -840,13 +851,86 @@ double admin_GetChangeBy
 {
     resTree_EntryRef_t resEntry = FindObservation(path);
 
-    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    if (resEntry == NULL)
     {
         return 0;
     }
     else
     {
         return resTree_GetChangeBy(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * If this is set, all non-JSON data will be ignored, and all JSON data that does not contain the
+ * the specified object member or array element will also be ignored.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetJsonExtraction
+(
+    const char* path,
+        ///< [IN] Path within the /obs/ namespace.
+    const char* extractionSpec
+        ///< [IN] string specifying the JSON member/element to extract.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+    }
+    else
+    {
+        resTree_SetJsonExtraction(obsEntry, extractionSpec);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * @return
+ *  - LE_OK if successful
+ *  - LE_NOT_FOUND if the resource doesn't exist or doesn't have a JSON extraction specifier set.
+ *  - LE_OVERFLOW if the JSON extraction specifier won't fit in the string buffer provided.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_GetJsonExtraction
+(
+    const char* LE_NONNULL path,
+        ///< [IN] Path within the /obs/ namespace.
+    char* result,
+        ///< [OUT] Buffer where result goes if LE_OK returned.
+    size_t resultSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = FindObservation(path);
+
+    if (resEntry == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+    else
+    {
+        const char* extractionSpec = resTree_GetJsonExtraction(resEntry);
+
+        if (extractionSpec[0] == '\0')
+        {
+            return LE_NOT_FOUND;
+        }
+
+        return le_utf8_Copy(result, extractionSpec, resultSize, NULL);
     }
 }
 
@@ -895,7 +979,7 @@ uint32_t admin_GetBufferMaxCount
 {
     resTree_EntryRef_t resEntry = FindObservation(path);
 
-    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    if (resEntry == NULL)
     {
         return 0;
     }
@@ -954,7 +1038,7 @@ uint32_t admin_GetBufferBackupPeriod
 {
     resTree_EntryRef_t resEntry = FindObservation(path);
 
-    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    if (resEntry == NULL)
     {
         return 0;
     }
@@ -1175,7 +1259,7 @@ bool admin_GetBooleanDefault
         if (   (defaultValue == NULL)
             || (resTree_GetDefaultDataType(resEntry) != IO_DATA_TYPE_BOOLEAN)  )
         {
-            return NAN;
+            return false;
         }
 
         return dataSample_GetBoolean(defaultValue);
@@ -1443,12 +1527,18 @@ void admin_SetJsonOverride
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Find out whether the resource currently has an override in effect.
+ * Find out whether the resource currently has an override set.
  *
- * @return true if the resource is overridden, false otherwise.
+ * @return true if the resource has an override, false otherwise.
+ *
+ * @note It's possible for an Input or Output to have an override set, but not be overridden.
+ *       This is because setting an override to a data type that does not match the Input or
+ *       Output resource's data type will result in the override being ignored.  Observations
+ *       (and Placeholders) have flexible data types, so if they have an override set, they will
+ *       definitely be overridden.
  */
 //--------------------------------------------------------------------------------------------------
-bool admin_IsOverridden
+bool admin_HasOverride
 (
     const char* path
         ///< [IN] Absolute path of the resource.
@@ -1463,7 +1553,193 @@ bool admin_IsOverridden
     }
     else
     {
-        return resTree_IsOverridden(resEntry);
+        return resTree_HasOverride(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the data type of the override value that is currently set on a given resource.
+ *
+ * @return The data type, or IO_DATA_TYPE_TRIGGER if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+io_DataType_t admin_GetOverrideDataType
+(
+    const char* LE_NONNULL path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return IO_DATA_TYPE_TRIGGER;
+    }
+    else
+    {
+        return resTree_GetOverrideDataType(resEntry);
+    }
+}
+
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value of a resource, if it is Boolean.
+ *
+ * @return the override value, or false if not set or set to another data type.
+ */
+//--------------------------------------------------------------------------------------------------
+bool admin_GetBooleanOverride
+(
+    const char* LE_NONNULL path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return false;
+    }
+    else
+    {
+        dataSample_Ref_t value = resTree_GetOverrideValue(resEntry);
+
+        if (   (value == NULL)
+            || (resTree_GetOverrideDataType(resEntry) != IO_DATA_TYPE_BOOLEAN)  )
+        {
+            return false;
+        }
+
+        return dataSample_GetBoolean(value);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value, if it is numeric.
+ *
+ * @return the override value, or NAN (not a number) if not set or set to another data type.
+ */
+//--------------------------------------------------------------------------------------------------
+double admin_GetNumericOverride
+(
+    const char* LE_NONNULL path
+        ///< [IN] Absolute path of the resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return NAN;
+    }
+    else
+    {
+        dataSample_Ref_t value = resTree_GetOverrideValue(resEntry);
+
+        if (   (value == NULL)
+            || (resTree_GetOverrideDataType(resEntry) != IO_DATA_TYPE_NUMERIC)  )
+        {
+            return NAN;
+        }
+
+        return dataSample_GetNumeric(value);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value, if it is a string.
+ *
+ * @return
+ *  - LE_OK if successful,
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the value.
+ *  - LE_NOT_FOUND if the resource doesn't have a string override value set.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_GetStringOverride
+(
+    const char* LE_NONNULL path,
+        ///< [IN] Absolute path of the resource.
+    char* value,
+        ///< [OUT]
+    size_t valueSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return LE_NOT_FOUND;
+    }
+    else
+    {
+        dataSample_Ref_t overrideValue = resTree_GetOverrideValue(resEntry);
+
+        if (   (overrideValue == NULL)
+            || (resTree_GetOverrideDataType(resEntry) != IO_DATA_TYPE_STRING)  )
+        {
+            return LE_NOT_FOUND;
+        }
+
+        return le_utf8_Copy(value, dataSample_GetString(overrideValue), valueSize, NULL);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value, in JSON format.
+ *
+ * @note This works for any type of override value.
+ *
+ * @return
+ *  - LE_OK if successful,
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the value.
+ *  - LE_NOT_FOUND if the resource doesn't have an override value set.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t admin_GetJsonOverride
+(
+    const char* LE_NONNULL path,
+        ///< [IN] Absolute path of the resource.
+    char* value,
+        ///< [OUT]
+    size_t valueSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resEntry = resTree_FindEntryAtAbsolutePath(path);
+
+    if ((resEntry == NULL) || (!resTree_IsResource(resEntry)))
+    {
+        return LE_NOT_FOUND;
+    }
+    else
+    {
+        dataSample_Ref_t overrideValue = resTree_GetOverrideValue(resEntry);
+
+        if (overrideValue == NULL)
+        {
+            return LE_NOT_FOUND;
+        }
+
+        return dataSample_ConvertToJson(overrideValue,
+                                        resTree_GetOverrideDataType(resEntry),
+                                        value,
+                                        valueSize);
     }
 }
 

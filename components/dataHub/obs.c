@@ -34,6 +34,8 @@
 #include "dataSample.h"
 #include "resource.h"
 #include "resTree.h"
+#include "json.h"
+#include "obs.h"
 
 #ifdef LEGATO_EMBEDDED
  #define BACKUP_DIR "/data/dataHubBackup/"
@@ -72,6 +74,8 @@ typedef struct
     le_sls_List_t sampleList; ///< Queue of buffered data samples (oldest first, newest last).
 
     le_dls_List_t readOpList; ///< List of ongoing Read Operations on the buffered samples.
+
+    char jsonExtraction[ADMIN_MAX_JSON_EXTRACTOR_LEN + 1]; ///< JSON extraction specifier (or "").
 }
 Observation_t;
 
@@ -1250,6 +1254,8 @@ res_Resource_t* obs_Create
 
     obsPtr->readOpList = LE_DLS_LIST_INIT;
 
+    obsPtr->jsonExtraction[0] = '\0';
+
     return &obsPtr->resource;
 }
 
@@ -1345,23 +1351,73 @@ void obs_RestoreBackup
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Determine whether a given value should be accepted by an Observation.
+ * Perform JSON extraction.  If the data type is not JSON, does nothing.
+ *
+ * @return true if successful, false if extraction failed.
  */
 //--------------------------------------------------------------------------------------------------
-bool obs_ShouldAccept
+bool obs_DoJsonExtraction
 (
     res_Resource_t* resPtr,
-    io_DataType_t dataType,
-    dataSample_Ref_t value
+    io_DataType_t* dataTypePtr,     ///< [INOUT] the data type, may be changed by JSON extraction
+    dataSample_Ref_t* valueRefPtr   ///< [INOUT] the data sample, may be replaced by JSON extraction
 )
 //--------------------------------------------------------------------------------------------------
 {
     Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
 
-    // Check the high limit and low limit first,.
+    // If JSON extraction is enabled,
+    if (obsPtr->jsonExtraction[0] != '\0')
+    {
+        if (*dataTypePtr != IO_DATA_TYPE_JSON)
+        {
+            return false;
+        }
+
+        // Extract the appropriate JSON data element from the value.
+        io_DataType_t extractedType;
+        dataSample_Ref_t extractedValue = json_Extract(*valueRefPtr,
+                                                       obsPtr->jsonExtraction,
+                                                       &extractedType);
+        if (extractedValue == NULL)
+        {
+            // Extraction failed.
+            return false;
+        }
+
+        // Extraction succeeded, so replace value data sample with extracted one.
+        le_mem_Release(*valueRefPtr);
+        *valueRefPtr = extractedValue;
+        *dataTypePtr = extractedType;
+    }
+
+    return true;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Determine whether the value should be accepted by a given Observation.
+ *
+ * @warning JSON extraction should be performed first if the data type is JSON.
+ *
+ * @return true if the value should be accepted.
+ */
+//--------------------------------------------------------------------------------------------------
+bool obs_ShouldAccept
+(
+    res_Resource_t* resPtr,
+    io_DataType_t dataType,     ///< [IN] the data type
+    dataSample_Ref_t valueRef   ///< [IN] the data sample
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    // Check the high limit and low limit before other limits.
     if (dataType == IO_DATA_TYPE_NUMERIC)
     {
-        double numericValue = dataSample_GetNumeric(value);
+        double numericValue = dataSample_GetNumeric(valueRef);
 
         // If both limits are enabled and the low limit is higher than the high limit, then
         // this is the "deadband" case. ( - <------HxxxxxxxxxL------> + )
@@ -1407,7 +1463,8 @@ bool obs_ShouldAccept
             }
 
             // If the data type has changed, we can't do a comparison, so only check the changeBy
-            // filter if the types are the same.
+            // filter if the new data sample's type is the same as the previous current value's
+            // type.
             if (dataType == res_GetDataType(resPtr))
             {
                 // If this is a numeric value and the last value was numeric too,
@@ -1415,7 +1472,8 @@ bool obs_ShouldAccept
                 {
                     // Reject changes in the current value smaller than the changeBy setting.
                     double previousNumber = dataSample_GetNumeric(previousValue);
-                    if (fabs(dataSample_GetNumeric(value) - previousNumber) < obsPtr->changeBy)
+                    if (  fabs(dataSample_GetNumeric(valueRef) - previousNumber)
+                        < obsPtr->changeBy)
                     {
                         return false;
                     }
@@ -1423,15 +1481,16 @@ bool obs_ShouldAccept
                 // For Boolean, a non-zero changeBy means filter out if unchanged.
                 else if (dataType == IO_DATA_TYPE_BOOLEAN)
                 {
-                    if (dataSample_GetBoolean(value) == dataSample_GetBoolean(previousValue))
+                    if (dataSample_GetBoolean(valueRef) == dataSample_GetBoolean(previousValue))
                     {
                         return false;
                     }
                 }
                 // For string or JSON, a non-zero changeBy means filter out if unchanged.
-                else if ((dataType == IO_DATA_TYPE_STRING) || (dataType == IO_DATA_TYPE_JSON))
+                else if (   (dataType == IO_DATA_TYPE_STRING)
+                         || (dataType == IO_DATA_TYPE_JSON))
                 {
-                    if (0 == strcmp(dataSample_GetString(value),
+                    if (0 == strcmp(dataSample_GetString(valueRef),
                                     dataSample_GetString(previousValue)))
                     {
                         return false;
@@ -1903,3 +1962,49 @@ void obs_ReadBufferJson
 
     StartRead(obsPtr, startPtr, outputFile, handlerPtr, contextPtr);
 }
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * If this is set, all non-JSON data will be ignored, and all JSON data that does not contain the
+ * the specified object member or array element will also be ignored.
+ */
+//--------------------------------------------------------------------------------------------------
+void obs_SetJsonExtraction
+(
+    res_Resource_t* resPtr,  ///< Observation resource.
+    const char* extractionSpec    ///< [IN] string specifying the JSON member/element to extract.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    LE_ASSERT(LE_OK == le_utf8_Copy(obsPtr->jsonExtraction,
+                                    extractionSpec,
+                                    sizeof(obsPtr->jsonExtraction),
+                                    NULL));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * @return Ptr to string containing JSON extraction specifier.  "" if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+const char* obs_GetJsonExtraction
+(
+    res_Resource_t* resPtr  ///< Observation resource.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    return obsPtr->jsonExtraction;
+}
+

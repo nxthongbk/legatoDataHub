@@ -122,3 +122,54 @@ const char* hub_GetEntryTypeName
 
     LE_FATAL("Unknown entry type %d.", type);
 }
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the client app's namespace.
+ *
+ * @return the reference to the namespace resource tree entry or NULL if failed.
+ */
+//--------------------------------------------------------------------------------------------------
+resTree_EntryRef_t hub_GetClientNamespace
+(
+    le_msg_SessionRef_t sessionRef  ///< IPC session reference.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    // See if we already looked up the app name, etc. and saved it as the IPC session context ptr.
+    resTree_EntryRef_t nsRef = le_msg_GetSessionContextPtr(sessionRef);
+    if (nsRef != NULL)
+    {
+        return nsRef;
+    }
+
+    // Get the client app name.
+    pid_t clientPid;
+    le_result_t result = le_msg_GetClientProcessId(sessionRef, &clientPid);
+    if (result != LE_OK)
+    {
+        LE_KILL_CLIENT("Unable to retrieve client process ID (%s)", LE_RESULT_TXT(result));
+        return NULL;
+    }
+    char appName[LE_LIMIT_APP_NAME_LEN + 1];
+    result = le_appInfo_GetName(clientPid, appName, sizeof(appName));
+    if (result != LE_OK)
+    {
+        LE_KILL_CLIENT("Unable to retrieve client app name (%s)", LE_RESULT_TXT(result));
+        return NULL;
+    }
+
+    // Get the "/app" namespace first.
+    nsRef = resTree_GetEntry(resTree_GetRoot(), "app");
+
+    // Now get the app's namespace under the /app namespace.
+    nsRef = resTree_GetEntry(nsRef, appName);
+
+    // Store the namespace entry reference as the IPC session Context Ptr to speed things up
+    // next time.
+    le_msg_SetSessionContextPtr(sessionRef, nsRef);
+
+    return nsRef;
+}
+

@@ -124,6 +124,10 @@
  * that @c adc/min and @c adc/max are updated.  The sensor can then also provide @c adc/enable,
  * which the admin tool can use to disable the ADC while it is updating @c adc/min and @c adc/max.
  *
+ * Paths are not permitted to contain '.', '[', or ']' characters, as those are reserved for
+ * specifying members of structured JSON data samples in the @ref c_dataHubAdmin "Admin" and
+ * @ref c_dataHubQuery "Query" APIs.
+ *
  *
  * @section c_dataHubIo_DataTypes Data Types
  *
@@ -145,6 +149,20 @@
  * Push Handler call-back on a numeric Output, whenever a numeric data sample arrives at that
  * Output, the JSON push handler will be called with a string parameter containing the JSON
  * representation of that numeric sample's value.
+ *
+ * @subsection c_dataHubIo_DataTypes_JsonExamples JSON Examples
+ *
+ * When a JSON Input is created, io_SetJsonExample() can be called to provide an example of what a
+ * value should look like.  This can be retrieved by the administrative app via a call to
+ * admin_GetJsonExample(), and allows the administrator to see (via an HMI of some kind) what a
+ * value might look like before the sensor is enabled.  This assists in the configuration of
+ * @ref c_dataHubAdmin_JsonExtraction "JSON extraction" before going live with data collection.
+ *
+ * @code
+ *
+ * io_SetJsonExample("accel/value", "{\"x\": 0, \"y\": 0, \"z\": 0}");
+ *
+ * @endcode
  *
  *
  * @section c_dataHubIo_Units Units
@@ -390,6 +408,20 @@ FUNCTION le_result_t CreateInput
     string path[MAX_RESOURCE_PATH_LEN] IN,///< Path within the client app's resource namespace.
     DataType dataType IN, ///< The data type.
     string units[MAX_UNITS_NAME_LEN] IN ///< e.g., "degC" (see senml); "" = unspecified.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the example value for a JSON-type Input resource.
+ *
+ * Does nothing if the resource is not found, is not an input, or doesn't have a JSON type.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION SetJsonExample
+(
+    string path[MAX_RESOURCE_PATH_LEN] IN,///< Path within the client app's resource namespace.
+    string example[MAX_STRING_VALUE_LEN] IN ///< The example JSON value string.
 );
 
 

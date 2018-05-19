@@ -52,14 +52,33 @@ void obs_RestoreBackup
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Determine whether a given value should be accepted by an Observation.
+ * Perform JSON extraction.  If the data type is not JSON, does nothing.
+ *
+ * @return true if successful, false if extraction failed.
+ */
+//--------------------------------------------------------------------------------------------------
+bool obs_DoJsonExtraction
+(
+    res_Resource_t* resPtr,
+    io_DataType_t* dataTypePtr,     ///< [INOUT] the data type, may be changed by JSON extraction
+    dataSample_Ref_t* valueRefPtr   ///< [INOUT] the data sample, may be replaced by JSON extraction
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Determine whether the value should be accepted by a given Observation.
+ *
+ * @warning JSON extraction should be performed first if the data type is JSON.
+ *
+ * @return true if the value should be accepted.
  */
 //--------------------------------------------------------------------------------------------------
 bool obs_ShouldAccept
 (
     res_Resource_t* resPtr,
-    io_DataType_t dataType,
-    dataSample_Ref_t value
+    io_DataType_t dataType,     ///< [IN] the data type
+    dataSample_Ref_t valueRef   ///< [IN] the data sample
 );
 
 
@@ -276,6 +295,36 @@ void obs_ReadBufferJson
     int outputFile, ///< File descriptor to write the data to.
     query_ReadCompletionFunc_t handlerPtr, ///< Completion callback.
     void* contextPtr    ///< Value to be passed to completion callback.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * If this is set, all non-JSON data will be ignored, and all JSON data that does not contain the
+ * the specified object member or array element will also be ignored.
+ */
+//--------------------------------------------------------------------------------------------------
+void obs_SetJsonExtraction
+(
+    res_Resource_t* resPtr,  ///< Observation resource.
+    const char* extractionSpec    ///< [IN] string specifying the JSON member/element to extract.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * @return Ptr to string containing JSON extraction specifier.  "" if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+const char* obs_GetJsonExtraction
+(
+    res_Resource_t* resPtr  ///< Observation resource.
 );
 
 

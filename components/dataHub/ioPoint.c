@@ -47,8 +47,6 @@ static void IoResourceDestructor
 {
     IoResource_t* ioPtr = objPtr;
 
-// TODO: Delete poll handlers.
-
     res_Destruct(&ioPtr->resource);
 }
 

@@ -162,19 +162,21 @@
  * @subsubsection c_dataHubAdmin_ObsFiltering Filtering
  *
  * By default, an Observation performs no filtering, accepting all samples it receives from its
- * data source.
+ * data source without modification.
  *
  * The Following functions are used to configure an Observation's filtering criteria:
  *  - admin_SetMinPeriod() - throttles the sample rate
  *  - admin_SetLowLimit() - causes numeric or Boolean samples below a given value to be dropped
  *  - admin_SetHighLimit() - causes numeric or Boolean samples above a given value to be dropped
  *  - admin_SetChangeBy() - add hysteresis for numeric, Boolean, or string samples
+ *  - admin_SetJsonExtraction() - extract a specific JSON array element or object member
  *
  * The Following functions can be used to retrieve these settings:
  *  - admin_GetMinPeriod()
  *  - admin_GetLowLimit()
  *  - admin_GetHighLimit()
  *  - admin_GetChangeBy()
+ *  - admin_GetJsonExtraction()
  *
  * For example, to implement a filter that drops values higher than 30.0,
  *
@@ -229,6 +231,39 @@
  *
  * admin_SetChangeBy(obsPath, 0.5);
  * @endcode
+ *
+ *
+ * @subsubsection c_dataHubAdmin_JsonExtraction Extracting Structured JSON Data
+ *
+ * It's possible to tell an Observation to extract a particular member or array element from
+ * JSON type data it receives.
+ *
+ * JSON syntax is used to specify what part of the JSON object should be extracted.
+ *
+ * For example, to extract only the vertical (z) axis of the accelerometer readings received
+ * by the observation resource at <c>/obs/verticalAccel</c>:
+ *
+ * @code
+ * result = admin_SetJsonExtraction("/obs/verticalAccel", "z");
+ * @endcode
+ *
+ * To extract the third element of a JSON array:
+ *
+ * @code
+ * result = admin_SetJsonExtraction("/obs/foo", "[3]");
+ * @endcode
+ *
+ * To extract the member called "x" in an object in the third element of an array:
+ *
+ * @code
+ * result = admin_SetJsonExtraction("/obs/foo", "[3].x");
+ * @endcode
+ *
+ * If a received value is not JSON type or does not contain the member or array element specified,
+ * then no part of the value will be accepted by the Observation.
+ *
+ * The extraction step is performed before any other filtering step, so it is possible to also
+ * set a @c ChangeBy, @c HighLimit, etc. to be applied to the extracted value.
  *
  *
  * @subsubsection c_dataHubAdmin_ObsBuffering Buffering
@@ -306,11 +341,18 @@
  *  - admin_SetJsonOverride()
  *  - admin_RemoveOverride()
  *
- * In addition, admin_IsOverridden() can be used to check if an override is currently in effect.
+ * admin_HasOverride() can be used to check if an override is currently set on a given resource.
  *
- * If an override is in effect, then the current value will always be the same as the
- * override value, so to check the value of an override, use the
- * @ref c_dataHubQuery_Fetching "value fetching functions of the Query API".
+ * @warning If the data type of an override on an Input or Output resource doesn't match the
+ *          data type of that resource, then the override will have no effect.
+ *
+ * admin_GetOverrideDataType() can be used to check the data type of an override.
+ *
+ * The following functions can be used to fetch override values:
+ *  - admin_GetBooleanOverride() - get the resource's override value, if the data type is Boolean
+ *  - admin_GetNumericOverride() - get the resource's override value, if the data type is numeric
+ *  - admin_GetStringOverride() - get the resource's override value, if the data type is string
+ *  - admin_GetJsonOverride() - get the resource's override value in JSON format (any type)
  *
  *
  * See also @ref c_dataHubAdmin_CleanUp.
@@ -402,6 +444,14 @@
 
 
 USETYPES io.api;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Maximum number of characters in a JSON extraction specifier string (excluding null terminator).
+ */
+//--------------------------------------------------------------------------------------------------
+DEFINE MAX_JSON_EXTRACTOR_LEN = 63;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -827,6 +877,42 @@ FUNCTION double GetChangeBy
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Set the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * If this is set, all non-JSON data will be ignored, and all JSON data that does not contain the
+ * the specified object member or array element will also be ignored.
+ *
+ * To clear, set to an empty string.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION SetJsonExtraction
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Path within the /obs/ namespace.
+    string extractionSpec[MAX_JSON_EXTRACTOR_LEN] IN ///< str specifying member/element to extract.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * @return
+ *  - LE_OK if successful
+ *  - LE_NOT_FOUND if the resource doesn't exist or doesn't have a JSON extraction specifier set.
+ *  - LE_OVERFLOW if the JSON extraction specifier won't fit in the string buffer provided.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetJsonExtraction
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN,  ///< Path within the /obs/ namespace.
+    string result[MAX_JSON_EXTRACTOR_LEN] OUT  ///< Buffer where result goes if LE_OK returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set the maximum number of data samples to buffer in a given Observation.  Buffers are FIFO
  * circular buffers. When full, the buffer drops the oldest value to make room for a new addition.
  */
@@ -1090,14 +1176,95 @@ FUNCTION SetJsonOverride
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Find out whether the resource currently has an override in effect.
+ * Find out whether the resource currently has an override set.
  *
- * @return true if the resource is overridden, false otherwise.
+ * @return true if the resource has an override, false otherwise.
+ *
+ * @note It's possible for an Input or Output to have an override set, but not be overridden.
+ *       This is because setting an override to a data type that does not match the Input or
+ *       Output resource's data type will result in the override being ignored.  Observations
+ *       (and Placeholders) have flexible data types, so if they have an override set, they will
+ *       definitely be overridden.
  */
 //--------------------------------------------------------------------------------------------------
-FUNCTION bool IsOverridden
+FUNCTION bool HasOverride
 (
     string path[io.MAX_RESOURCE_PATH_LEN] IN  ///< Absolute path of the resource.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the data type of the override value that is currently set on a given resource.
+ *
+ * @return The data type, or IO_DATA_TYPE_TRIGGER if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION io.DataType GetOverrideDataType
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN  ///< Absolute path of the resource.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value of a resource, if it is Boolean.
+ *
+ * @return the override value, or false if not set or set to another data type.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION bool GetBooleanOverride
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN  ///< Absolute path of the resource.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value, if it is numeric.
+ *
+ * @return the override value, or NAN (not a number) if not set or set to another data type.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION double GetNumericOverride
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN  ///< Absolute path of the resource.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value, if it is a string.
+ *
+ * @return
+ *  - LE_OK if successful,
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the value.
+ *  - LE_NOT_FOUND if the resource doesn't have a string override value set.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetStringOverride
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Absolute path of the resource.
+    string value[io.MAX_STRING_VALUE_LEN] OUT
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value, in JSON format.
+ *
+ * @note This works for any type of override value.
+ *
+ * @return
+ *  - LE_OK if successful,
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the value.
+ *  - LE_NOT_FOUND if the resource doesn't have an override value set.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t GetJsonOverride
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN, ///< Absolute path of the resource.
+    string value[io.MAX_STRING_VALUE_LEN] OUT
 );
 
 

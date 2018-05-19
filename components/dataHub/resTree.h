@@ -708,12 +708,38 @@ void resTree_SetOverride
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Find out whether the resource currently has an override in effect.
+ * Find out whether the resource currently has an override set.
  *
- * @return true if the resource is overridden, false otherwise.
+ * @return true if the resource has an override set, false otherwise.
  */
 //--------------------------------------------------------------------------------------------------
-bool resTree_IsOverridden
+bool resTree_HasOverride
+(
+    resTree_EntryRef_t resEntry
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the data type of the override value that is currently set on a given resource.
+ *
+ * @return The data type, or IO_DATA_TYPE_TRIGGER if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+io_DataType_t resTree_GetOverrideDataType
+(
+    resTree_EntryRef_t resEntry
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value of a resource.
+ *
+ * @return the override value, or NULL if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t resTree_GetOverrideValue
 (
     resTree_EntryRef_t resEntry
 );
@@ -789,6 +815,61 @@ void resTree_ReadBufferJson
     int outputFile, ///< File descriptor to write the data to.
     query_ReadCompletionFunc_t handlerPtr, ///< Completion callback.
     void* contextPtr    ///< Value to be passed to completion callback.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON example value for a given resource.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_SetJsonExample
+(
+    resTree_EntryRef_t resEntry,
+    dataSample_Ref_t example
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON example value for a given resource.
+ *
+ * @return A reference to the example value or NULL if no example set.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t resTree_GetJsonExample
+(
+    resTree_EntryRef_t resEntry
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * If this is set, all non-JSON data will be ignored, and all JSON data that does not contain the
+ * the specified object member or array element will also be ignored.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_SetJsonExtraction
+(
+    resTree_EntryRef_t resEntry,  ///< Observation entry.
+    const char* extractionSpec    ///< [IN] string specifying the JSON member/element to extract.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * @return Ptr to string containing JSON extraction specifier.  "" if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+const char* resTree_GetJsonExtraction
+(
+    resTree_EntryRef_t resEntry  ///< Observation entry.
 );
 
 

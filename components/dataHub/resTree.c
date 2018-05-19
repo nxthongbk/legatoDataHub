@@ -216,6 +216,14 @@ static resTree_EntryRef_t GoToEntry
 )
 //--------------------------------------------------------------------------------------------------
 {
+    // Validate the path.
+    const char* illegalCharPtr = strpbrk(path, ".[]");
+    if (illegalCharPtr != NULL)
+    {
+        LE_ERROR("Illegal character '%c' in path '%s'.", *illegalCharPtr, path);
+        return NULL;
+    }
+
     resTree_EntryRef_t currentEntry = baseNamespace;
 
     size_t i = 0;   // Index into path.
@@ -1396,18 +1404,52 @@ void resTree_SetOverride
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Find out whether the resource currently has an override in effect.
+ * Find out whether the resource currently has an override set.
  *
- * @return true if the resource is overridden, false otherwise.
+ * @return true if the resource has an override set, false otherwise.
  */
 //--------------------------------------------------------------------------------------------------
-bool resTree_IsOverridden
+bool resTree_HasOverride
 (
     resTree_EntryRef_t resEntry
 )
 //--------------------------------------------------------------------------------------------------
 {
-    return res_IsOverridden(resEntry->resourcePtr);
+    return res_HasOverride(resEntry->resourcePtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the data type of the override value that is currently set on a given resource.
+ *
+ * @return The data type, or IO_DATA_TYPE_TRIGGER if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+io_DataType_t resTree_GetOverrideDataType
+(
+    resTree_EntryRef_t resEntry
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return res_GetOverrideDataType(resEntry->resourcePtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the override value of a resource.
+ *
+ * @return the override value, or NULL if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t resTree_GetOverrideValue
+(
+    resTree_EntryRef_t resEntry
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return res_GetOverrideValue(resEntry->resourcePtr);
 }
 
 
@@ -1535,4 +1577,96 @@ void resTree_ReadBufferJson
     LE_ASSERT(obsEntry->type == ADMIN_ENTRY_TYPE_OBSERVATION);
 
     res_ReadBufferJson(obsEntry->resourcePtr, startAfter, outputFile, handlerPtr, contextPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON example value for a given resource.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_SetJsonExample
+(
+    resTree_EntryRef_t resEntry,
+    dataSample_Ref_t example
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_ASSERT(resEntry->resourcePtr != NULL);
+
+    res_SetJsonExample(resEntry->resourcePtr, example);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON example value for a given resource.
+ *
+ * @return A reference to the example value or NULL if no example set.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t resTree_GetJsonExample
+(
+    resTree_EntryRef_t resEntry
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_ASSERT(resEntry->resourcePtr != NULL);
+
+    return res_GetJsonExample(resEntry->resourcePtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * If this is set, all non-JSON data will be ignored, and all JSON data that does not contain the
+ * the specified object member or array element will also be ignored.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_SetJsonExtraction
+(
+    resTree_EntryRef_t resEntry,  ///< Observation entry.
+    const char* extractionSpec    ///< [IN] string specifying the JSON member/element to extract.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_ASSERT(resEntry->resourcePtr != NULL);
+
+    if (resEntry->type != ADMIN_ENTRY_TYPE_OBSERVATION)
+    {
+        LE_CRIT("Not an observation (actually a %s).", hub_GetEntryTypeName(resEntry->type));
+    }
+    else
+    {
+        res_SetJsonExtraction(resEntry->resourcePtr, extractionSpec);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the JSON member/element specifier for extraction of data from within a structured JSON
+ * value received by a given Observation.
+ *
+ * @return Ptr to string containing JSON extraction specifier.  "" if not set.
+ */
+//--------------------------------------------------------------------------------------------------
+const char* resTree_GetJsonExtraction
+(
+    resTree_EntryRef_t resEntry  ///< Observation entry.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_ASSERT(resEntry->resourcePtr != NULL);
+
+    if (resEntry->type != ADMIN_ENTRY_TYPE_OBSERVATION)
+    {
+        LE_DEBUG("Not an observation (actually a %s).", hub_GetEntryTypeName(resEntry->type));
+        return "";
+    }
+
+    return res_GetJsonExtraction(resEntry->resourcePtr);
 }
