@@ -64,19 +64,6 @@ io_DataType_t ioPoint_GetDataType
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Determine whether a value should be accepted by an Input or Output, based on data type and units.
- */
-//--------------------------------------------------------------------------------------------------
-bool ioPoint_ShouldAccept
-(
-    res_Resource_t* resPtr,
-    io_DataType_t dataType,
-    const char* units       ///< Units string, or NULL = take on resource's units.
-);
-
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Add a Push Handler.
  *
  * @return Reference to the handler added.
@@ -99,6 +86,20 @@ hub_HandlerRef_t ioPoint_AddPushHandler
 void ioPoint_RemovePushHandler
 (
     hub_HandlerRef_t handlerRef
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform type coercion, replacing a data sample with another of a different type, if necessary,
+ * to make the data compatible with the data type of a given Input or Output resource.
+ */
+//--------------------------------------------------------------------------------------------------
+void ioPoint_DoTypeCoercion
+(
+    res_Resource_t* resPtr,
+    io_DataType_t* dataTypePtr,     ///< [INOUT] the data type, may be changed by type coercion
+    dataSample_Ref_t* valueRefPtr   ///< [INOUT] the data sample, may be replaced by type coercion
 );
 
 

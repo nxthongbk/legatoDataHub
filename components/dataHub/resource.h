@@ -270,7 +270,7 @@ void res_Push
 (
     res_Resource_t* resPtr,    ///< The resource to push to.
     io_DataType_t dataType,         ///< The data type.
-    const char* units,              ///< The units ("" = unspecified)
+    const char* units,              ///< The units (NULL or "" = unspecified)
     dataSample_Ref_t dataSample     ///< The data sample (timestamp + value).
 );
 

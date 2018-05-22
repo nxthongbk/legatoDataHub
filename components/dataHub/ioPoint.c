@@ -9,6 +9,7 @@
 #include "dataHub.h"
 #include "resource.h"
 #include "ioPoint.h"
+#include "json.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -158,48 +159,218 @@ io_DataType_t ioPoint_GetDataType
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Determine whether a value should be accepted by an Input or Output, based on data type and units.
+ * Perform type coercion, replacing a data sample with another of a different type, if necessary,
+ * to make the data compatible with the data type of a given Input or Output resource.
  */
 //--------------------------------------------------------------------------------------------------
-bool ioPoint_ShouldAccept
+void ioPoint_DoTypeCoercion
 (
     res_Resource_t* resPtr,
-    io_DataType_t dataType,
-    const char* units       ///< Units string, or NULL = take on resource's units.
+    io_DataType_t* dataTypePtr,     ///< [INOUT] the data type, may be changed by type coercion
+    dataSample_Ref_t* valueRefPtr   ///< [INOUT] the data sample, may be replaced by type coercion
 )
 //--------------------------------------------------------------------------------------------------
 {
-    io_DataType_t destDataType = ioPoint_GetDataType(resPtr);
+    IoResource_t* ioPtr = CONTAINER_OF(resPtr, IoResource_t, resource);
 
-    // Check for data type mismatches.
-    // Note that trigger, JSON, and string type Inputs and Outputs can accept any type of
-    // data sample.  Trigger type resources just discard the value.  JSON and string type
-    // resources can convert other types to their type.  Trigger type resources don't care
-    // about units either.
-    if (destDataType == IO_DATA_TYPE_TRIGGER)
+    io_DataType_t fromType = *dataTypePtr;
+    dataSample_Ref_t fromSample = *valueRefPtr;
+
+    io_DataType_t toType = ioPtr->dataType;
+    dataSample_Ref_t toSample = NULL;
+
+    double timestamp = dataSample_GetTimestamp(fromSample);
+
+    switch (toType)
     {
-        return true;
-    }
-    else if (   (dataType != destDataType)
-             && (destDataType != IO_DATA_TYPE_STRING)
-             && (destDataType != IO_DATA_TYPE_JSON) )
-    {
-        LE_WARN("Rejecting push: data type mismatch (pushing %s to %s).",
-                hub_GetDataTypeName(dataType),
-                hub_GetDataTypeName(destDataType));
-        return false;
+        case IO_DATA_TYPE_TRIGGER:
+
+            // If the pushed sample is not a trigger, then create a new trigger sample with the
+            // same timestamp as the original sample.  Otherwise no type conversion required.
+            if (fromType != IO_DATA_TYPE_TRIGGER)
+            {
+                toSample = dataSample_CreateTrigger(timestamp);
+            }
+            break;
+
+        case IO_DATA_TYPE_BOOLEAN:
+
+            switch (fromType)
+            {
+                case IO_DATA_TYPE_TRIGGER:
+
+                    // If the pushed sample is a trigger, just use false.
+                    toSample = dataSample_CreateBoolean(timestamp, false);
+                    break;
+
+                case IO_DATA_TYPE_BOOLEAN:
+
+                    break;  // No conversion required.
+
+                case IO_DATA_TYPE_NUMERIC:
+                {
+                    double value = dataSample_GetNumeric(fromSample);
+                    toSample = dataSample_CreateBoolean(timestamp, (value != 0));
+                    break;
+                }
+
+                case IO_DATA_TYPE_STRING:
+                {
+                    const char* value = dataSample_GetString(fromSample);
+                    toSample = dataSample_CreateBoolean(timestamp, (value[0] != '\0'));
+                    break;
+                }
+
+                case IO_DATA_TYPE_JSON:
+                {
+                    bool newValue = json_ConvertToBoolean(dataSample_GetJson(fromSample));
+                    toSample = dataSample_CreateBoolean(timestamp, newValue);
+                    break;
+                }
+            }
+
+            break;
+
+        case IO_DATA_TYPE_NUMERIC:
+
+            switch (fromType)
+            {
+                case IO_DATA_TYPE_TRIGGER:
+
+                    toSample = dataSample_CreateNumeric(timestamp, NAN);
+                    break;
+
+                case IO_DATA_TYPE_BOOLEAN:
+                {
+                    double newValue = (dataSample_GetBoolean(fromSample) ? 1 : 0);
+                    toSample = dataSample_CreateNumeric(timestamp, newValue);
+                    break;
+                }
+
+                case IO_DATA_TYPE_NUMERIC:
+
+                    break;  // No conversion required.
+
+                case IO_DATA_TYPE_STRING:
+                {
+                    double newValue = (dataSample_GetString(fromSample)[0] == '\0' ? 0 : 1);
+                    toSample = dataSample_CreateNumeric(timestamp, newValue);
+                    break;
+                }
+
+                case IO_DATA_TYPE_JSON:
+                {
+                    double newValue = json_ConvertToNumeric(dataSample_GetJson(fromSample));
+                    toSample = dataSample_CreateNumeric(timestamp, newValue);
+                    break;
+                }
+            }
+            break;
+
+        case IO_DATA_TYPE_STRING:
+
+            switch (fromType)
+            {
+                case IO_DATA_TYPE_TRIGGER:
+
+                    toSample = dataSample_CreateString(timestamp, "");
+                    break;
+
+                case IO_DATA_TYPE_BOOLEAN:
+                {
+                    bool oldValue = dataSample_GetBoolean(fromSample);
+                    const char* newValue = oldValue ? "true" : "false";
+                    toSample = dataSample_CreateString(timestamp, newValue);
+                    break;
+                }
+
+                case IO_DATA_TYPE_NUMERIC:
+                {
+                    double oldValue = dataSample_GetNumeric(fromSample);
+                    char newValue[HUB_MAX_STRING_BYTES];
+                    if (snprintf(newValue, sizeof(newValue), "%lf", oldValue) >= sizeof(newValue))
+                    {
+                        // Should never happen.
+                        LE_CRIT("String overflow.");
+                        newValue[0] = '\0';
+                    }
+                    toSample = dataSample_CreateString(timestamp, newValue);
+                    break;
+                }
+
+                case IO_DATA_TYPE_STRING:
+
+                    break;  // No conversion required.
+
+                case IO_DATA_TYPE_JSON:
+
+                    toSample = dataSample_CreateString(timestamp, dataSample_GetJson(fromSample));
+                    break;
+
+            }
+            break;
+
+        case IO_DATA_TYPE_JSON:
+
+            switch (fromType)
+            {
+                case IO_DATA_TYPE_TRIGGER:
+
+                    toSample = dataSample_CreateJson(timestamp, "null");
+                    break;
+
+                case IO_DATA_TYPE_BOOLEAN:
+                {
+                    bool oldValue = dataSample_GetBoolean(fromSample);
+                    const char* newValue = oldValue ? "true" : "false";
+                    toSample = dataSample_CreateJson(timestamp, newValue);
+                    break;
+                }
+
+                case IO_DATA_TYPE_NUMERIC:
+                {
+                    double oldValue = dataSample_GetNumeric(fromSample);
+                    char newValue[HUB_MAX_STRING_BYTES];
+                    if (snprintf(newValue, sizeof(newValue), "%lf", oldValue) >= sizeof(newValue))
+                    {
+                        // Should never happen.
+                        LE_CRIT("String overflow.");
+                        newValue[0] = '\0';
+                    }
+                    toSample = dataSample_CreateJson(timestamp, newValue);
+                    break;
+                }
+
+                case IO_DATA_TYPE_STRING:
+                {
+                    const char* oldValue = dataSample_GetString(fromSample);
+                    char newValue[HUB_MAX_STRING_BYTES];
+                    if (   snprintf(newValue, sizeof(newValue), "\"%s\"", oldValue)
+                        >= sizeof(newValue))
+                    {
+                        // Truncate the string in the JSON value.
+                        LE_DEBUG("String overflow.");
+                        newValue[sizeof(newValue - 2)] = '"';
+                        newValue[sizeof(newValue - 1)] = '\0';
+                    }
+                    toSample = dataSample_CreateJson(timestamp, newValue);
+                    break;
+                }
+
+                case IO_DATA_TYPE_JSON:
+
+                    break;  // No conversion required.
+            }
+            break;
     }
 
-    // Check for units mismatches.
-    // Ignore units if the units are supposed to be obtained from the resource, or if the
-    // receiving resource doesn't have units.
-    if ((units != NULL) && (resPtr->units[0] != '\0') && (strcmp(units, resPtr->units) != 0))
+    // If a conversion happened, release the old value and replace it with the new one.
+    if (toSample != NULL)
     {
-        LE_WARN("Rejecting push: units mismatch (pushing '%s' to '%s').", units, resPtr->units);
-        return false;
+        le_mem_Release(fromSample);
+        *valueRefPtr = toSample;
+        *dataTypePtr = toType;
     }
-
-    return true;
 }
 
 

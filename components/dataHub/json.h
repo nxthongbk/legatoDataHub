@@ -30,4 +30,30 @@ dataSample_Ref_t json_Extract
 );
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Convert a JSON value into a Boolean value.
+ *
+ * @return The Boolean value.
+ */
+//--------------------------------------------------------------------------------------------------
+bool json_ConvertToBoolean
+(
+    const char* jsonValue
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Convert a JSON value into a numeric value.
+ *
+ * @return The numeric value.
+ */
+//--------------------------------------------------------------------------------------------------
+double json_ConvertToNumeric
+(
+    const char* jsonValue
+);
+
+
 #endif // JSON_H_INCLUDE_GUARD

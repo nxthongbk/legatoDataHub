@@ -82,6 +82,9 @@ static bool CanGetThereFromHere
 /**
  * Figure out whether values of a given data type are acceptable for a given resource.
  *
+ * @note If not, a type conversion will have to be done before the value can be used as the
+ *       resource's current value.
+ *
  * @return true if acceptable.  false if should be ignored.
  */
 //--------------------------------------------------------------------------------------------------
@@ -411,6 +414,13 @@ le_result_t res_SetSource
         le_dls_Queue(&(srcPtr->destList), &(destPtr->destListLink));
         destPtr->srcPtr = srcPtr;
 
+        // Propagate the source's JSON example value, if it has one and this resource accepts JSON.
+        if ((srcPtr->jsonExample != NULL) && IsAcceptable(destPtr, IO_DATA_TYPE_JSON))
+        {
+            le_mem_AddRef(srcPtr->jsonExample);
+            res_SetJsonExample(destPtr, srcPtr->jsonExample);
+        }
+
         // If an extended update is in progress, flag that the configuration of both the
         // source and destination resources are changing, so acceptance of new pushed values
         // should be suspended until the update finishes.
@@ -419,13 +429,19 @@ le_result_t res_SetSource
             srcPtr->isConfigChanging = true;
             destPtr->isConfigChanging = true;
         }
+    }
+    // If the source is being set to a NULL source (removing the source) and the resource is
+    // units-flexible (Observation or Placeholder), then clear the units string.
+    else
+    {
+        admin_EntryType_t entryType = resTree_GetEntryType(destPtr->entryRef);
 
-        // Propagate the source's JSON example value, if it has one and this resource accepts JSON.
-        if ((srcPtr->jsonExample != NULL) && IsAcceptable(destPtr, IO_DATA_TYPE_JSON))
+        if (   (entryType == ADMIN_ENTRY_TYPE_OBSERVATION)
+            || (entryType == ADMIN_ENTRY_TYPE_PLACEHOLDER)  )
         {
-            le_mem_AddRef(srcPtr->jsonExample);
-            res_SetJsonExample(destPtr, srcPtr->jsonExample);
+            SetUnits(destPtr, "");
         }
+
     }
 
     return LE_OK;
@@ -473,7 +489,7 @@ static void UpdateCurrentValue
 {
     admin_EntryType_t entryType = resTree_GetEntryType(resPtr->entryRef);
 
-    // Check for type mismatches and filter them out.
+    // Check for type mismatches.
     if (!IsAcceptable(resPtr, dataType))
     {
         LE_WARN("Type mismatch: Ignoring '%s' for '%s' resource of type '%s'.",
@@ -547,13 +563,17 @@ void res_Push
 (
     res_Resource_t* resPtr,         ///< The resource to push to.
     io_DataType_t dataType,         ///< The data type.
-    const char* units,              ///< The units (NULL = take on resource's units)
+    const char* units,              ///< The units (NULL or "" = take on resource's units)
     dataSample_Ref_t dataSample     ///< The data sample (timestamp + value).
 )
 //--------------------------------------------------------------------------------------------------
 {
     LE_ASSERT(resPtr->entryRef != NULL);
-    admin_EntryType_t entryType = resTree_GetEntryType(resPtr->entryRef);
+
+    if ((units != NULL) && (*units == '\0'))
+    {
+        units = NULL;
+    }
 
     // Record this as the latest pushed value, even if it doesn't get accepted as the new
     // current value.
@@ -567,82 +587,82 @@ void res_Push
 
     // If the resource is undergoing a change to its routing or filtering configuration,
     // then acceptance of new samples is suspended until the configuration change is done.
-    // Otherwise, ask the sub-class if this should be accepted as the new current value.
-    bool accepted;
     if (resPtr->isConfigChanging)
     {
-        accepted = false;
         LE_WARN("Rejecting pushed value because configuration update is in progress.");
-    }
-    else
-    {
-        switch (entryType)
-        {
-            case ADMIN_ENTRY_TYPE_INPUT:
-            case ADMIN_ENTRY_TYPE_OUTPUT:
-
-                accepted = ioPoint_ShouldAccept(resPtr, dataType, units);
-                break;
-
-            case ADMIN_ENTRY_TYPE_OBSERVATION:
-
-                // Do JSON extraction (if applicable) before asking if the result should be
-                // accepted.
-                accepted = (   obs_DoJsonExtraction(resPtr, &dataType, &dataSample)
-                            && obs_ShouldAccept(resPtr, dataType, dataSample)  );
-                break;
-
-            case ADMIN_ENTRY_TYPE_PLACEHOLDER:
-
-                accepted = true;  // Placeholders accept everything.
-                break;
-
-            default:
-                LE_FATAL("Unexpected entry type.");
-                break;
-        }
-    }
-
-    if (!accepted)
-    {
         le_mem_Release(dataSample);
+        return;
     }
-    else
+
+    // If an override is in effect, the current value becomes a new data sample that has
+    // the same timestamp as the pushed sample but the override's value (and we drop the
+    // original sample).
+    if (res_IsOverridden(resPtr))
     {
-        // If the destination resource is a trigger type Input or Output and the pushed sample
-        // is not a trigger, then create a new trigger sample with the same timestamp as the
-        // pushed sample and use that.
-        if (   (dataType != IO_DATA_TYPE_TRIGGER)
-            && (   (entryType == ADMIN_ENTRY_TYPE_INPUT)
-                || (entryType == ADMIN_ENTRY_TYPE_OUTPUT) )
-            && (ioPoint_GetDataType(resPtr) == IO_DATA_TYPE_TRIGGER)  )
-        {
-            dataSample = dataSample_CreateTrigger(dataSample_GetTimestamp(dataSample));
-            dataType = IO_DATA_TYPE_TRIGGER;
-        }
-        // If an override is in effect, the current value becomes a new data sample that has
-        // the same timestamp as the pushed sample but the override's value (and we drop the
-        // original sample).
-        else if (res_IsOverridden(resPtr))
-        {
-            dataSample_Ref_t overrideSample = dataSample_Copy(resPtr->overrideType,
-                                                              resPtr->overrideValue);
-            dataSample_SetTimestamp(overrideSample, dataSample_GetTimestamp(dataSample));
-            dataType = resPtr->overrideType;
-            le_mem_Release(dataSample);
-            dataSample = overrideSample;
-        }
-
-        // If the units were provided, and this is an Observation or a Placeholder
-        // (which are "units-flexible"), then apply the units to this resource.
-        if ((units != NULL) && (   (entryType == ADMIN_ENTRY_TYPE_OBSERVATION)
-                                || (entryType == ADMIN_ENTRY_TYPE_PLACEHOLDER)  )  )
-        {
-            SetUnits(resPtr, units);
-        }
-
-        UpdateCurrentValue(resPtr, dataType, dataSample);
+        dataSample_Ref_t overrideSample = dataSample_Copy(resPtr->overrideType,
+                                                          resPtr->overrideValue);
+        dataSample_SetTimestamp(overrideSample, dataSample_GetTimestamp(dataSample));
+        dataType = resPtr->overrideType;
+        le_mem_Release(dataSample);
+        dataSample = overrideSample;
+        units = NULL;   // Get units from resource.
     }
+
+    switch (resTree_GetEntryType(resPtr->entryRef))
+    {
+        case ADMIN_ENTRY_TYPE_INPUT:
+        case ADMIN_ENTRY_TYPE_OUTPUT:
+
+            // Check for units mismatches.
+            // But, ignore the units if the units are supposed to be obtained from the resource,
+            // or if the receiving resource doesn't have units.
+            if (   (units != NULL)
+                && (resPtr->units[0] != '\0')
+                && (strcmp(units, resPtr->units) != 0)  )
+            {
+                LE_WARN("Rejecting push: units mismatch (pushing '%s' to '%s').",
+                        units,
+                        resPtr->units);
+                le_mem_Release(dataSample);
+                return;
+            }
+
+            // Inputs and outputs have a fixed type.  This means that if a different type
+            // of value is received, we must do a type conversion before we can accept it.
+            ioPoint_DoTypeCoercion(resPtr, &dataType, &dataSample);
+            break;
+
+        case ADMIN_ENTRY_TYPE_OBSERVATION:
+
+            // Do JSON extraction (if applicable) before filtering.
+            if (   (obs_DoJsonExtraction(resPtr, &dataType, &dataSample) != LE_OK)
+                || (!obs_ShouldAccept(resPtr, dataType, dataSample))  )
+            {
+                le_mem_Release(dataSample);
+                return;
+            }
+
+            // *** FALL THROUGH ***
+
+        case ADMIN_ENTRY_TYPE_PLACEHOLDER:
+
+            // Note: Placeholders accept everything.
+
+            // This is a units-flexible resource, so if the units were provided,
+            // apply the units to this resource.
+            if (units != NULL)
+            {
+                SetUnits(resPtr, units);
+            }
+
+            break;
+
+        default:
+            LE_FATAL("Unexpected entry type.");
+            break;
+    }
+
+    UpdateCurrentValue(resPtr, dataType, dataSample);
 }
 
 

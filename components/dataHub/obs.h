@@ -54,10 +54,10 @@ void obs_RestoreBackup
 /**
  * Perform JSON extraction.  If the data type is not JSON, does nothing.
  *
- * @return true if successful, false if extraction failed.
+ * @return LE_OK if successful.
  */
 //--------------------------------------------------------------------------------------------------
-bool obs_DoJsonExtraction
+le_result_t obs_DoJsonExtraction
 (
     res_Resource_t* resPtr,
     io_DataType_t* dataTypePtr,     ///< [INOUT] the data type, may be changed by JSON extraction

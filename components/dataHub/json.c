@@ -20,12 +20,12 @@
 /**
  * Skip over whitespace, if any.
  *
- * @return Pointer to the first non-whitespace character in the string.
+ * @return Pointer to the first non-whitespace character in the string, or NULL iff valPtr is NULL.
  */
 //--------------------------------------------------------------------------------------------------
 static const char* SkipWhitespace
 (
-    const char* valPtr
+    const char* valPtr  ///< JSON string, or NULL.
 )
 //--------------------------------------------------------------------------------------------------
 {
@@ -45,7 +45,7 @@ static const char* SkipWhitespace
 /**
  * Skip over a string.
  *
- * @return Pointer to the first non-whitespace character after the string, or NULL on error.
+ * @return Pointer to the first character after the string, or NULL on error.
  */
 //--------------------------------------------------------------------------------------------------
 static const char* SkipString
@@ -79,7 +79,7 @@ static const char* SkipString
         }
     }
 
-    return SkipWhitespace(valPtr + 1);
+    return valPtr + 1;
 }
 
 
@@ -87,7 +87,7 @@ static const char* SkipString
 /**
  * Skip a literal value, such as (e.g., true, false, or null).
  *
- * @return Pointer to the first non-whitespace character after the value, or NULL on error.
+ * @return Pointer to the first character after the value, or NULL on error.
  */
 //--------------------------------------------------------------------------------------------------
 static const char* SkipLiteral
@@ -105,7 +105,7 @@ static const char* SkipLiteral
         // The literal must be followed by space, a comma, a closing bracket or end of the string.
         if (isspace(*valPtr))
         {
-            return SkipWhitespace(valPtr + 1);
+            return valPtr;
         }
         else if (   (*valPtr == ',')
                  || (*valPtr == ']')
@@ -122,9 +122,52 @@ static const char* SkipLiteral
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Parse a number value from a JSON string.
+ *
+ * @return LE_OK if successful.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t ParseNumber
+(
+    double* numberPtr,
+    const char* string,
+    const char* legalEndChars ///< String containing characters allowed to appear after the number.
+                              ///< '\0' is always a legal end character.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    errno = 0;
+    char* endPtr;
+    double number = strtod(string, &endPtr);
+    if ((endPtr != string) && (errno == 0))
+    {
+        // Check that one of the permitted end characters is next.
+        for (;;)
+        {
+            if (*legalEndChars == *endPtr)
+            {
+                *numberPtr = number;
+                return LE_OK;
+            }
+
+            if (*legalEndChars == '\0')
+            {
+                break;
+            }
+
+            legalEndChars++;
+        }
+    }
+
+    return LE_FAULT;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Skip a number.
  *
- * @return Pointer to the first non-whitespace character after the number, or NULL on error.
+ * @return Pointer to the first character after the number, or NULL on error.
  */
 //--------------------------------------------------------------------------------------------------
 static const char* SkipNumber
@@ -140,14 +183,11 @@ static const char* SkipNumber
     if (endPtr != valPtr)
     {
         // The number must be followed by space, a comma, a closing bracket or end of the string.
-        if (isspace(*endPtr))
-        {
-            return SkipWhitespace(endPtr + 1);
-        }
-        else if (   (*endPtr == ',')
-                 || (*endPtr == ']')
-                 || (*endPtr == '}')
-                 || (*endPtr == '\0')  )
+        if (   isspace(*endPtr)
+            || (*endPtr == ',')
+            || (*endPtr == ']')
+            || (*endPtr == '}')
+            || (*endPtr == '\0')  )
         {
             return endPtr;
         }
@@ -165,7 +205,7 @@ static const char* SkipArray(const char* valPtr);
 /**
  * Skip any kind of JSON value.
  *
- * @return Pointer to the first non-whitespace character after the value, or NULL on error.
+ * @return Pointer to the first character after the value, or NULL on error.
  */
 //--------------------------------------------------------------------------------------------------
 static const char* SkipValue
@@ -211,7 +251,7 @@ static const char* SkipValue
 /**
  * Skip an object member.
  *
- * @return Pointer to the first non-whitespace character after the member, or NULL on error.
+ * @return Pointer to the first character after the member, or NULL on error.
  */
 //--------------------------------------------------------------------------------------------------
 static const char* SkipMember
@@ -224,6 +264,8 @@ static const char* SkipMember
 
     if (valPtr != NULL)
     {
+        valPtr = SkipWhitespace(valPtr);
+
         if (*valPtr != ':')
         {
             return NULL;
@@ -240,7 +282,7 @@ static const char* SkipMember
 /**
  * Skip an object.
  *
- * @return Pointer to the first non-whitespace character after the object, or NULL on error.
+ * @return Pointer to the first character after the object, or NULL on error.
  */
 //--------------------------------------------------------------------------------------------------
 static const char* SkipObject
@@ -258,7 +300,7 @@ static const char* SkipObject
 
     if (*valPtr == '}')
     {
-        return SkipWhitespace(valPtr + 1);
+        return valPtr + 1;
     }
 
     while (*valPtr != '\0')
@@ -272,7 +314,7 @@ static const char* SkipObject
 
         if (*valPtr == '}')
         {
-            return SkipWhitespace(valPtr + 1);
+            return valPtr + 1;
         }
 
         if (*valPtr == ',')
@@ -307,7 +349,7 @@ static const char* SkipArray
 
     if (*valPtr == ']')
     {
-        return SkipWhitespace(valPtr + 1);
+        return valPtr + 1;
     }
 
     while (*valPtr != '\0')
@@ -321,7 +363,7 @@ static const char* SkipArray
 
         if (*valPtr == ']')
         {
-            return SkipWhitespace(valPtr + 1);
+            return valPtr + 1;
         }
 
         if (*valPtr == ',')
@@ -357,7 +399,7 @@ static const char* GoToElement
     valPtr = SkipWhitespace(valPtr);
     for (size_t i = 0; i != index; i++)
     {
-        valPtr = SkipValue(valPtr);
+        valPtr = SkipWhitespace(SkipValue(valPtr));
 
         if ((valPtr == NULL) || (*valPtr != ','))
         {
@@ -400,6 +442,7 @@ static const char* GoToMember
 
     valPtr++;   // Skip '{'
     valPtr = SkipWhitespace(valPtr);
+
     // If we find something other than a '"' beginning a member name, then the JSON is malformed.
     while (*valPtr == '"')
     {
@@ -417,7 +460,7 @@ static const char* GoToMember
         }
 
         // The member name doesn't match, so skip over this member.
-        valPtr = SkipMember(valPtr);
+        valPtr = SkipWhitespace(SkipMember(valPtr));
 
         // Since we haven't found the member we are looking for yet, we hope to find a comma next,
         // meaning there will be more members to follow.
@@ -636,7 +679,6 @@ dataSample_Ref_t json_Extract
 
             if (strncmp(valPtr, "true", 4) == 0)
             {
-                endPtr = valPtr + 4;
                 *dataTypePtr = IO_DATA_TYPE_BOOLEAN;
                 return dataSample_CreateBoolean(dataSample_GetTimestamp(sampleRef), true);
             }
@@ -646,7 +688,6 @@ dataSample_Ref_t json_Extract
 
             if (strncmp(valPtr, "false", 5) == 0)
             {
-                endPtr = valPtr + 5;
                 *dataTypePtr = IO_DATA_TYPE_BOOLEAN;
                 return dataSample_CreateBoolean(dataSample_GetTimestamp(sampleRef), false);
             }
@@ -656,7 +697,6 @@ dataSample_Ref_t json_Extract
 
             if (strncmp(valPtr, "null", 4) == 0)
             {
-                endPtr = valPtr + 4;
                 *dataTypePtr = IO_DATA_TYPE_TRIGGER;
                 return dataSample_CreateTrigger(dataSample_GetTimestamp(sampleRef));
             }
@@ -664,11 +704,8 @@ dataSample_Ref_t json_Extract
 
         default:
         {
-            errno = 0;
-            char* nonConstEndPtr;
-            double number = strtod(valPtr, &nonConstEndPtr);
-            endPtr = nonConstEndPtr;
-            if ((endPtr != valPtr) && (errno == 0))
+            double number;
+            if (ParseNumber(&number, valPtr, "}], \n\r\t") == LE_OK)
             {
                 *dataTypePtr = IO_DATA_TYPE_NUMERIC;
                 return dataSample_CreateNumeric(dataSample_GetTimestamp(sampleRef), number);
@@ -684,3 +721,73 @@ dataSample_Ref_t json_Extract
     return NULL;
 }
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Convert a JSON value into a Boolean value.
+ *
+ * @return The Boolean value.
+ */
+//--------------------------------------------------------------------------------------------------
+bool json_ConvertToBoolean
+(
+    const char* jsonValue
+)
+//--------------------------------------------------------------------------------------------------
+{
+    // If the JSON is a Boolean value, use that.
+    if (strcmp(jsonValue, "true") == 0)
+    {
+        return true;
+    }
+    if (strcmp(jsonValue, "false") == 0)
+    {
+        return false;
+    }
+
+    // See if it's a number, in which case we interpret zero as false and non-zero as true.
+    double number;
+    if (ParseNumber(&number, jsonValue, "") == LE_OK)
+    {
+        return ((number != 0) && (!isnan(number)));
+    }
+
+    // If not a Boolean or a number, use empty string as false and non-empty
+    // string as true.
+    return (jsonValue[0] != '\0');
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Convert a JSON value into a numeric value.
+ *
+ * @return The numeric value.
+ */
+//--------------------------------------------------------------------------------------------------
+double json_ConvertToNumeric
+(
+    const char* jsonValue
+)
+//--------------------------------------------------------------------------------------------------
+{
+    // If the JSON is a Boolean value, use true = 1, false = 0.
+    if (strcmp(jsonValue, "true") == 0)
+    {
+        return 1;
+    }
+    if (strcmp(jsonValue, "false") == 0)
+    {
+        return 0;
+    }
+
+    // See if it's a number.
+    double number;
+    if (ParseNumber(&number, jsonValue, "") == LE_OK)
+    {
+        return number;
+    }
+
+    // If not a Boolean or a number, return NaN.
+    return NAN;
+}
