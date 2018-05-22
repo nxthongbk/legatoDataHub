@@ -441,7 +441,6 @@ le_result_t res_SetSource
         {
             SetUnits(destPtr, "");
         }
-
     }
 
     return LE_OK;

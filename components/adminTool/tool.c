@@ -674,7 +674,17 @@ static void PrintDataType
     if (result == LE_OK)
     {
         Indent(depth);
-        printf("data type = %s\n", DataTypeStr(dataType));
+
+        char example[IO_MAX_STRING_VALUE_LEN];
+
+        if (query_GetJsonExample(path, example, sizeof(example)) == LE_OK)
+        {
+            printf("data type = %s (e.g., '%s')\n", DataTypeStr(dataType), example);
+        }
+        else
+        {
+            printf("data type = %s\n", DataTypeStr(dataType));
+        }
     }
     else
     {
