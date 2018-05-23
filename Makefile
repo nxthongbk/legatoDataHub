@@ -34,6 +34,7 @@ start: stop all
 	sdir bind "<$(USER)>.dhubToolIo" "<$(USER)>.io"
 	sdir bind "<$(USER)>.dhubToolQuery" "<$(USER)>.query"
 	test/supervisor
+	$(DHUB) set backupPeriod temp 5
 	$(DHUB) set bufferSize temp 100
 	$(DHUB) set default /app/sensor/counter/period 0.25
 	$(DHUB) set source /app/sensor/temperature/trigger /app/sensor/counter/value

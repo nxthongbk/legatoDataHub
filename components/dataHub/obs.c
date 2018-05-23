@@ -4,6 +4,10 @@
  *
  * Implementation of Observations.
  *
+ * Data sample buffer backup files are kept under BACKUP_DIR.  Their file system paths relative
+ * to BACKUP_DIR are the same as their resource paths relative to the /obs/ namespace in the
+ * resource tree.
+ *
  * The data sample buffer backup file format looks like this (little-endian byte order):
  *
  * - file format version byte = 0
@@ -36,16 +40,21 @@
 #include "resTree.h"
 #include "json.h"
 #include "obs.h"
+#include <ftw.h>
 
 #ifdef LEGATO_EMBEDDED
  #define BACKUP_DIR "/data/dataHubBackup/"
 #else
  #define BACKUP_DIR "backup/"
 #endif
+#define BACKUP_DIR_PATH_LEN (sizeof(BACKUP_DIR) - 1)
 #define BACKUP_SUFFIX ".bak"
-#define MAX_BACKUP_FILE_PATH_BYTES (  sizeof(BACKUP_DIR) \
+#define BACKUP_SUFFIX_LEN (sizeof(BACKUP_SUFFIX) - 1)
+
+#define MAX_BACKUP_FILE_PATH_BYTES (  BACKUP_DIR_PATH_LEN \
                                     + IO_MAX_RESOURCE_PATH_LEN \
-                                    + sizeof(BACKUP_SUFFIX)  )
+                                    + BACKUP_SUFFIX_LEN \
+                                    + 1 /* for null terminator */ )
 
 /// Number of seconds in 30 years.
 #define THIRTY_YEARS 946684800.0
@@ -1888,6 +1897,103 @@ uint32_t obs_GetBufferBackupPeriod
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function that gets called for each file system object (file, directory, symlink, etc.) found
+ * under the backup directory.
+ *
+ * @return 0 to continue the file system tree walk, non-zero to stop.
+ */
+//--------------------------------------------------------------------------------------------------
+static int BackupDirTreeWalkCallback
+(
+    const char *fpath,      ///< File system path of the object.
+    const struct stat *sb,  ///< Ptr to the stat() info for the object.
+    int typeflag,           ///< What type of file system object we're looking at.
+    struct FTW *ftwbuf      ///< Ptr to buffer containing the basename and the nesting level.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    switch (typeflag)
+    {
+        case FTW_F:  // regular file
+        {
+            // Compute the resource tree entry path of the associated Observation.
+            const char* relPath = fpath + BACKUP_DIR_PATH_LEN;
+            const char* suffixPtr = strstr(relPath, BACKUP_SUFFIX);
+            if (suffixPtr == NULL)
+            {
+                LE_WARN("Unexpected file in backup directory. Skipping '%s'.", fpath);
+                return 0;
+            }
+            // Copy all but the suffix into the observation path.
+            size_t obsPathBytes = (suffixPtr - relPath) + sizeof("/obs/");
+            char obsPath[HUB_MAX_RESOURCE_PATH_BYTES];
+            if (obsPathBytes >= sizeof(obsPath))
+            {
+                LE_ERROR("Length of path too long. Skipping '%s'.", fpath);
+                return 0;
+            }
+            (void)snprintf(obsPath, obsPathBytes, "/obs/%s", relPath);
+
+            // If that Observation doesn't exist, or its backup period is 0, delete the file.
+            resTree_EntryRef_t entryRef = resTree_FindEntry(resTree_GetRoot(), obsPath);
+            if (   (entryRef == NULL)
+                || (resTree_GetEntryType(entryRef) != ADMIN_ENTRY_TYPE_OBSERVATION)
+                || (resTree_GetBufferBackupPeriod(entryRef) == 0)  )
+            {
+                if (unlink(fpath) != 0)
+                {
+                    LE_CRIT("Failed to delete '%s' (%m).", fpath);
+                }
+            }
+
+            return 0;
+        }
+        case FTW_D:  // directory and FTW_DEPTH was NOT specified
+
+            // This should never happen, because we specified FTW_DEPTH.
+            LE_CRIT("Received FTW_D flag for '%s'!", fpath);
+            return 0;
+
+        case FTW_DNR:   // directory that can't be read
+
+            LE_ERROR("Can't read directory '%s'", fpath);
+            return 0;
+
+        case FTW_DP:    // directory and FTW_DEPTH was specified
+        {
+            // If the directory is empty, delete it.
+            int result = rmdir(fpath);
+            if ((result == -1) && (errno != ENOTEMPTY) && (errno != EEXIST))
+            {
+                LE_CRIT("Failed to remove directory '%s' (%m).", fpath);
+            }
+            return 0;
+        }
+        case FTW_NS:     // stat() call failed on fpath
+
+            LE_CRIT("Failed to stat '%s'", fpath);
+            return 0;
+
+        case FTW_SL:     // symbolic link and FTW_PHYS specified
+
+            // This should never happen, because we didn't specify FTW_PHYS.
+            LE_CRIT("Received FTW_SL flag for '%s'!", fpath);
+            return 0;
+
+        case FTW_SLN:    // symbolic link pointing to a nonexistent file
+
+            LE_CRIT("Broken symlink found at '%s'", fpath);
+            return 0;
+    }
+
+    LE_CRIT("Unexpected type flag %d.", typeflag);
+
+    return -1;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Delete buffer backup files that aren't being used.
  */
 //--------------------------------------------------------------------------------------------------
@@ -1897,7 +2003,24 @@ void obs_DeleteUnusedBackupFiles
 )
 //--------------------------------------------------------------------------------------------------
 {
-    LE_INFO("***** Implement clean-up of unused buffer backup files.");
+    LE_DEBUG("Cleaning up unused buffer backup files.");
+
+    // Walk the directory tree under the backup directory.
+    // For each file, compute the resource tree entry path of the associated Observation.
+    // If that Observation doesn't exist, delete the file.
+    // If the directory is empty (after examining all files in it), delete the directory.
+    // Note: The number of file descriptors allowed to be used is selected to prevent
+    // running into the app's open file descriptor limit, while avoiding a lot of opening
+    // and closing of directories.  Normally we don't expect a lot of depth in the Observation
+    // resource naming heirarchy.
+    int result = nftw(BACKUP_DIR,
+                      BackupDirTreeWalkCallback,
+                      4 /* max fds */,
+                      FTW_DEPTH /* depth-first traversal */);
+    if (result != 0)
+    {
+        LE_CRIT("Failed to traverse backup directory '%s' (%m)", BACKUP_DIR);
+    }
 }
 
 
