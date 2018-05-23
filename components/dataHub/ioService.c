@@ -8,6 +8,7 @@
 
 #include "dataHub.h"
 #include "handler.h"
+#include "json.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -454,11 +455,18 @@ void io_PushJson
         return;
     }
 
-    // Create a Data Sample object for this new sample.
-    dataSample_Ref_t sampleRef = dataSample_CreateJson(timestamp, value);
+    if (json_IsValid(value))
+    {
+        // Create a Data Sample object for this new sample.
+        dataSample_Ref_t sampleRef = dataSample_CreateJson(timestamp, value);
 
-    // Push the sample to the Resource.
-    resTree_Push(resRef, IO_DATA_TYPE_JSON, sampleRef);
+        // Push the sample to the Resource.
+        resTree_Push(resRef, IO_DATA_TYPE_JSON, sampleRef);
+    }
+    else
+    {
+        LE_WARN("Rejecting invalid JSON string '%s'.", value);
+    }
 }
 
 
@@ -875,10 +883,19 @@ void io_SetJsonDefault
     }
     else if (!resTree_HasDefault(resRef))
     {
-        // Create a Data Sample object for this new sample.
-        dataSample_Ref_t sampleRef = dataSample_CreateJson(0.0, value);
+        if (json_IsValid(value))
+        {
+            // Create a Data Sample object for this new sample.
+            dataSample_Ref_t sampleRef = dataSample_CreateJson(0.0, value);
 
-        resTree_SetDefault(resRef, IO_DATA_TYPE_JSON, sampleRef);
+            resTree_SetDefault(resRef, IO_DATA_TYPE_JSON, sampleRef);
+        }
+        else
+        {
+            LE_KILL_CLIENT("Invalid JSON string as default value for resource '%s' (%s).",
+                           path,
+                           value);
+        }
     }
 }
 
@@ -1101,43 +1118,6 @@ le_result_t io_GetJson
     }
 
     return dataSample_ConvertToJson(currentValue, resTree_GetDataType(resRef), value, valueSize);
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Add handler function for EVENT 'io_Poll'
- */
-//--------------------------------------------------------------------------------------------------
-io_PollHandlerRef_t io_AddPollHandler
-(
-    const char* path,
-        ///< [IN] Resource path within the client app's namespace.
-    io_PollHandlerFunc_t callbackPtr,
-        ///< [IN]
-    void* contextPtr
-        ///< [IN]
-)
-//--------------------------------------------------------------------------------------------------
-{
-    LE_WARN("Polling not yet supported.");
-
-    return NULL;
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Remove handler function for EVENT 'io_Poll'
- */
-//--------------------------------------------------------------------------------------------------
-void io_RemovePollHandler
-(
-    io_PollHandlerRef_t handlerRef
-        ///< [IN]
-)
-//--------------------------------------------------------------------------------------------------
-{
 }
 
 

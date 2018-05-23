@@ -53,6 +53,17 @@
  * Values pushed in this way propagate through the system in the same way that they would if
  * they were pushed in by an I/O API client via an Input resource.
  *
+ * @note All of these @c Push() functions accept @c 0 as a timestamp, which tells the
+ *       Data Hub to generate the timestamp.
+ *
+ * For example,
+ *
+ * @code
+ *
+ * admin_PushNumeric(INPUT_NAME, 0, inputValue);
+ *
+ * @endcode
+ *
  *
  * @section c_dataHubAdmin_Watching Watching Resources
  *
@@ -169,14 +180,12 @@
  *  - admin_SetLowLimit() - causes numeric or Boolean samples below a given value to be dropped
  *  - admin_SetHighLimit() - causes numeric or Boolean samples above a given value to be dropped
  *  - admin_SetChangeBy() - add hysteresis for numeric, Boolean, or string samples
- *  - admin_SetJsonExtraction() - extract a specific JSON array element or object member
  *
  * The Following functions can be used to retrieve these settings:
  *  - admin_GetMinPeriod()
  *  - admin_GetLowLimit()
  *  - admin_GetHighLimit()
  *  - admin_GetChangeBy()
- *  - admin_GetJsonExtraction()
  *
  * For example, to implement a filter that drops values higher than 30.0,
  *
@@ -482,7 +491,7 @@ FUNCTION PushTrigger
 (
     string path[io.MAX_RESOURCE_PATH_LEN] IN,///< Absolute resource tree path.
     double timestamp IN ///< Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
-                        ///< Zero = now.
+                        ///< Zero = now (i.e., generate a timestamp for me).
 );
 
 
@@ -498,7 +507,7 @@ FUNCTION PushBoolean
 (
     string path[io.MAX_RESOURCE_PATH_LEN] IN,///< Absolute resource tree path.
     double timestamp IN,///< Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
-                        ///< Zero = now.
+                        ///< Zero = now (i.e., generate a timestamp for me).
     bool value IN
 );
 
@@ -515,7 +524,7 @@ FUNCTION PushNumeric
 (
     string path[io.MAX_RESOURCE_PATH_LEN] IN,///< Absolute resource tree path.
     double timestamp IN,///< Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
-                        ///< Zero = now.
+                        ///< Zero = now (i.e., generate a timestamp for me).
     double value IN
 );
 
@@ -532,7 +541,7 @@ FUNCTION PushString
 (
     string path[io.MAX_RESOURCE_PATH_LEN] IN,///< Absolute resource tree path.
     double timestamp IN,///< Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
-                        ///< Zero = now.
+                        ///< Zero = now (i.e., generate a timestamp for me).
     string value[io.MAX_STRING_VALUE_LEN] IN
 );
 
@@ -549,7 +558,7 @@ FUNCTION PushJson
 (
     string path[io.MAX_RESOURCE_PATH_LEN] IN,///< Absolute resource tree path.
     double timestamp IN,///< Timestamp in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC).
-                        ///< Zero = now.
+                        ///< Zero = now (i.e., generate a timestamp for me).
     string value[io.MAX_STRING_VALUE_LEN] IN
 );
 

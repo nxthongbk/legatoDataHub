@@ -7,6 +7,7 @@
 //--------------------------------------------------------------------------------------------------
 
 #include "dataHub.h"
+#include "handler.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -708,4 +709,223 @@ le_result_t query_GetJsonExample
     }
 
     return LE_UNAVAILABLE;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add a handler function to be called when a value is pushed to (and accepted by) a resource
+ * anywhere in the resource tree.  If there's no resource at that location yet, a placeholder will
+ * be created.
+ *
+ * @return A reference to the handler, which can be removed using handler_Remove().
+ */
+//--------------------------------------------------------------------------------------------------
+static hub_HandlerRef_t AddPushHandler
+(
+    const char* path,   ///< Absolute resource path.
+    io_DataType_t dataType,
+    void* callbackPtr,  ///< Callback function pointer
+    void* contextPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t resRef = resTree_GetResource(resTree_GetRoot(), path);
+    if (resRef == NULL)
+    {
+        LE_KILL_CLIENT("Bad resource path '%s'.", path);
+        return NULL;
+    }
+
+    return resTree_AddPushHandler(resRef, dataType, callbackPtr, contextPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'query_TriggerPush'
+ */
+//--------------------------------------------------------------------------------------------------
+query_TriggerPushHandlerRef_t query_AddTriggerPushHandler
+(
+    const char* path,
+        ///< [IN] Absolute path of resource.
+    query_TriggerPushHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    hub_HandlerRef_t ref = AddPushHandler(path, IO_DATA_TYPE_TRIGGER, callbackPtr, contextPtr);
+
+    return (query_TriggerPushHandlerRef_t)ref;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'query_TriggerPush'
+ */
+//--------------------------------------------------------------------------------------------------
+void query_RemoveTriggerPushHandler
+(
+    query_TriggerPushHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    handler_Remove((hub_HandlerRef_t)handlerRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'query_BooleanPush'
+ */
+//--------------------------------------------------------------------------------------------------
+query_BooleanPushHandlerRef_t query_AddBooleanPushHandler
+(
+    const char* path,
+        ///< [IN] Absolute path of resource.
+    query_BooleanPushHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    hub_HandlerRef_t ref = AddPushHandler(path, IO_DATA_TYPE_BOOLEAN, callbackPtr, contextPtr);
+
+    return (query_BooleanPushHandlerRef_t)ref;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'query_BooleanPush'
+ */
+//--------------------------------------------------------------------------------------------------
+void query_RemoveBooleanPushHandler
+(
+    query_BooleanPushHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    handler_Remove((hub_HandlerRef_t)handlerRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'query_NumericPush'
+ */
+//--------------------------------------------------------------------------------------------------
+query_NumericPushHandlerRef_t query_AddNumericPushHandler
+(
+    const char* path,
+        ///< [IN] Absolute path of resource.
+    query_NumericPushHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    hub_HandlerRef_t ref = AddPushHandler(path, IO_DATA_TYPE_NUMERIC, callbackPtr, contextPtr);
+
+    return (query_NumericPushHandlerRef_t)ref;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'query_NumericPush'
+ */
+//--------------------------------------------------------------------------------------------------
+void query_RemoveNumericPushHandler
+(
+    query_NumericPushHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    handler_Remove((hub_HandlerRef_t)handlerRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'query_StringPush'
+ */
+//--------------------------------------------------------------------------------------------------
+query_StringPushHandlerRef_t query_AddStringPushHandler
+(
+    const char* path,
+        ///< [IN] Absolute path of resource.
+    query_StringPushHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    hub_HandlerRef_t ref = AddPushHandler(path, IO_DATA_TYPE_STRING, callbackPtr, contextPtr);
+
+    return (query_StringPushHandlerRef_t)ref;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'query_StringPush'
+ */
+//--------------------------------------------------------------------------------------------------
+void query_RemoveStringPushHandler
+(
+    query_StringPushHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    handler_Remove((hub_HandlerRef_t)handlerRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'query_JsonPush'
+ */
+//--------------------------------------------------------------------------------------------------
+query_JsonPushHandlerRef_t query_AddJsonPushHandler
+(
+    const char* path,
+        ///< [IN] Absolute path of resource.
+    query_JsonPushHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    hub_HandlerRef_t ref = AddPushHandler(path, IO_DATA_TYPE_JSON, callbackPtr, contextPtr);
+
+    return (query_JsonPushHandlerRef_t)ref;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'query_JsonPush'
+ */
+//--------------------------------------------------------------------------------------------------
+void query_RemoveJsonPushHandler
+(
+    query_JsonPushHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    handler_Remove((hub_HandlerRef_t)handlerRef);
 }

@@ -56,4 +56,17 @@ double json_ConvertToNumeric
 );
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Validate a JSON string.
+ *
+ * @return true if the string is valid JSON.  false if not.
+ */
+//--------------------------------------------------------------------------------------------------
+bool json_IsValid
+(
+    const char* jsonValue
+);
+
+
 #endif // JSON_H_INCLUDE_GUARD

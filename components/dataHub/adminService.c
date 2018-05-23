@@ -10,6 +10,7 @@
 #include "ioService.h"
 #include "resource.h"
 #include "handler.h"
+#include "json.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -175,9 +176,16 @@ void admin_PushJson
 
     if (entry != NULL)
     {
-        resTree_Push(entry,
-                     IO_DATA_TYPE_JSON,
-                     dataSample_CreateJson(timestamp, value));
+        if (json_IsValid(value))
+        {
+            resTree_Push(entry,
+                         IO_DATA_TYPE_JSON,
+                         dataSample_CreateJson(timestamp, value));
+        }
+        else
+        {
+            LE_ERROR("Discarding invalid JSON string '%s'.", value);
+        }
     }
 }
 
@@ -1174,7 +1182,14 @@ void admin_SetJsonDefault
 )
 //--------------------------------------------------------------------------------------------------
 {
-    SetDefault(path, IO_DATA_TYPE_JSON, dataSample_CreateJson(0, value));
+    if (json_IsValid(value))
+    {
+        SetDefault(path, IO_DATA_TYPE_JSON, dataSample_CreateJson(0, value));
+    }
+    else
+    {
+        LE_ERROR("Discarding invalid JSON value '%s'.", value);
+    }
 }
 
 
@@ -1521,7 +1536,14 @@ void admin_SetJsonOverride
 )
 //--------------------------------------------------------------------------------------------------
 {
-    SetOverride(path, IO_DATA_TYPE_JSON, dataSample_CreateJson(0, value));
+    if (json_IsValid(value))
+    {
+        SetOverride(path, IO_DATA_TYPE_JSON, dataSample_CreateJson(0, value));
+    }
+    else
+    {
+        LE_ERROR("Discarding invalid JSON value '%s'.", value);
+    }
 }
 
 

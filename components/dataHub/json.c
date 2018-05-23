@@ -305,7 +305,7 @@ static const char* SkipObject
 
     while (*valPtr != '\0')
     {
-        valPtr = SkipMember(valPtr);
+        valPtr = SkipWhitespace(SkipMember(valPtr));
 
         if (valPtr == NULL)
         {
@@ -354,7 +354,7 @@ static const char* SkipArray
 
     while (*valPtr != '\0')
     {
-        valPtr = SkipValue(valPtr);
+        valPtr = SkipWhitespace(SkipValue(valPtr));
 
         if (valPtr == NULL)
         {
@@ -790,4 +790,28 @@ double json_ConvertToNumeric
 
     // If not a Boolean or a number, return NaN.
     return NAN;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Validate a JSON string.
+ *
+ * @return true if the string is valid JSON.  false if not.
+ */
+//--------------------------------------------------------------------------------------------------
+bool json_IsValid
+(
+    const char* jsonValue
+)
+//--------------------------------------------------------------------------------------------------
+{
+    const char* endPtr = SkipWhitespace(SkipValue(SkipWhitespace(jsonValue)));
+
+    if ((endPtr == NULL) || (*endPtr != '\0'))
+    {
+        return false;
+    }
+
+    return true;
 }
