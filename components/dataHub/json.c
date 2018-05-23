@@ -566,7 +566,7 @@ static const char* Find
 
             default:
             {
-                if (!isalpha(specPtr[1]))
+                if (!isalpha(*specPtr))
                 {
                     goto badSpec;
                 }
