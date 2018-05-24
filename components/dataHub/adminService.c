@@ -55,6 +55,10 @@ void admin_PushTrigger
                      IO_DATA_TYPE_TRIGGER,
                      dataSample_CreateTrigger(timestamp));
     }
+    else
+    {
+        LE_WARN("Discarding value pushed to non-existent resource '%s'.", path);
+    }
 }
 
 
@@ -85,6 +89,10 @@ void admin_PushBoolean
         resTree_Push(entry,
                      IO_DATA_TYPE_BOOLEAN,
                      dataSample_CreateBoolean(timestamp, value));
+    }
+    else
+    {
+        LE_WARN("Discarding value pushed to non-existent resource '%s'.", path);
     }
 }
 
@@ -117,6 +125,10 @@ void admin_PushNumeric
                      IO_DATA_TYPE_NUMERIC,
                      dataSample_CreateNumeric(timestamp, value));
     }
+    else
+    {
+        LE_WARN("Discarding value pushed to non-existent resource '%s'.", path);
+    }
 }
 
 
@@ -147,6 +159,10 @@ void admin_PushString
         resTree_Push(entry,
                      IO_DATA_TYPE_STRING,
                      dataSample_CreateString(timestamp, value));
+    }
+    else
+    {
+        LE_WARN("Discarding value pushed to non-existent resource '%s'.", path);
     }
 }
 
@@ -186,6 +202,10 @@ void admin_PushJson
         {
             LE_ERROR("Discarding invalid JSON string '%s'.", value);
         }
+    }
+    else
+    {
+        LE_WARN("Discarding value pushed to non-existent resource '%s'.", path);
     }
 }
 
