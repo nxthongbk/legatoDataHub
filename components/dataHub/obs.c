@@ -1288,17 +1288,17 @@ void obs_RestoreBackup
     struct stat st = {0};
     if (stat(BACKUP_DIR, &st) == -1)
     {
-        LE_INFO("Backup directory '" BACKUP_DIR "' not found. (%m)");
+        LE_DEBUG("Backup directory '" BACKUP_DIR "' not found. (%m)");
         return;
     }
-
-    LE_INFO("Restoring backup...");
 
     char path[MAX_BACKUP_FILE_PATH_BYTES];
     if (GetBackupFilePath(path, sizeof(path), obsPtr) != LE_OK)
     {
         return;
     }
+
+    LE_INFO("Loading observation buffer from file '%s'.", path);
 
     // Open the file for reading.
     le_result_t result;
@@ -2012,14 +2012,21 @@ void obs_DeleteUnusedBackupFiles
     // Note: The number of file descriptors allowed to be used is selected to prevent
     // running into the app's open file descriptor limit, while avoiding a lot of opening
     // and closing of directories.  Normally we don't expect a lot of depth in the Observation
-    // resource naming heirarchy.
+    // resource naming heirarchy, so there shouldn't be a lot of depth in the backup directory.
     int result = nftw(BACKUP_DIR,
                       BackupDirTreeWalkCallback,
                       4 /* max fds */,
                       FTW_DEPTH /* depth-first traversal */);
     if (result != 0)
     {
-        LE_CRIT("Failed to traverse backup directory '%s' (%m)", BACKUP_DIR);
+        if (errno == ENOENT)
+        {
+            LE_DEBUG("No backup directory. Skipping backup file clean-up.");
+        }
+        else
+        {
+            LE_CRIT("Failed to traverse backup directory '%s' (%m)", BACKUP_DIR);
+        }
     }
 }
 
