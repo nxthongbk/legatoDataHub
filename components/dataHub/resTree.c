@@ -1670,3 +1670,113 @@ const char* resTree_GetJsonExtraction
 
     return res_GetJsonExtraction(resEntry->resourcePtr);
 }
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the minimum value found in an Observation's data set within a given time span.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double resTree_QueryMin
+(
+    resTree_EntryRef_t obsEntry,    ///< Observation entry.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_ASSERT(obsEntry->resourcePtr != NULL);
+
+    if (obsEntry->type != ADMIN_ENTRY_TYPE_OBSERVATION)
+    {
+        return NAN;
+    }
+
+    return res_QueryMin(obsEntry->resourcePtr, startTime);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the maximum value found within a given time span in an Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double resTree_QueryMax
+(
+    resTree_EntryRef_t obsEntry,    ///< Observation entry.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_ASSERT(obsEntry->resourcePtr != NULL);
+
+    if (obsEntry->type != ADMIN_ENTRY_TYPE_OBSERVATION)
+    {
+        return NAN;
+    }
+
+    return res_QueryMax(obsEntry->resourcePtr, startTime);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the mean (average) of all values found within a given time span in an Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double resTree_QueryMean
+(
+    resTree_EntryRef_t obsEntry,    ///< Observation entry.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_ASSERT(obsEntry->resourcePtr != NULL);
+
+    if (obsEntry->type != ADMIN_ENTRY_TYPE_OBSERVATION)
+    {
+        return NAN;
+    }
+
+    return res_QueryMean(obsEntry->resourcePtr, startTime);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the standard deviation of all values found within a given time span in an
+ * Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double resTree_QueryStdDev
+(
+    resTree_EntryRef_t obsEntry,    ///< Observation entry.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_ASSERT(obsEntry->resourcePtr != NULL);
+
+    if (obsEntry->type != ADMIN_ENTRY_TYPE_OBSERVATION)
+    {
+        return NAN;
+    }
+
+    return res_QueryStdDev(obsEntry->resourcePtr, startTime);
+}
+

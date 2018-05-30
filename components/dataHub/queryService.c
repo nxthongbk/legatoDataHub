@@ -112,10 +112,9 @@ le_result_t query_ReadBufferJson
 }
 
 
-
 //--------------------------------------------------------------------------------------------------
 /**
- * Get the minimum value found in an Observation's data set withing a given time span.
+ * Get the minimum value found in an Observation's data set within a given time span.
  *
  * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
  *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
@@ -139,9 +138,8 @@ double query_GetMin
         return NAN;
     }
 
-    return NAN;
+    return resTree_QueryMin(entryRef, startTime);
 }
-
 
 
 //--------------------------------------------------------------------------------------------------
@@ -170,9 +168,8 @@ double query_GetMax
         return NAN;
     }
 
-    return NAN;
+    return resTree_QueryMax(entryRef, startTime);
 }
-
 
 
 //--------------------------------------------------------------------------------------------------
@@ -201,9 +198,8 @@ double query_GetMean
         return NAN;
     }
 
-    return NAN;
+    return resTree_QueryMean(entryRef, startTime);
 }
-
 
 
 //--------------------------------------------------------------------------------------------------
@@ -233,7 +229,7 @@ double query_GetStdDev
         return NAN;
     }
 
-    return NAN;
+    return resTree_QueryStdDev(entryRef, startTime);
 }
 
 

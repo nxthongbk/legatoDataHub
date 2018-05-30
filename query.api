@@ -115,7 +115,7 @@ FUNCTION le_result_t ReadBufferJson
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get the minimum value found in an Observation's data set withing a given time span.
+ * Get the minimum value found in an Observation's data set within a given time span.
  *
  * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
  *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data

@@ -315,6 +315,59 @@ static void ObservationDestructor
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get the first (oldest) buffer entry in an Observation's data sample buffer.
+ *
+ * @return Pointer to the buffer entry or NULL if the buffer is empty.
+ */
+//--------------------------------------------------------------------------------------------------
+static BufferEntry_t* GetOldestBufferEntry
+(
+    Observation_t* obsPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    le_sls_Link_t* linkPtr = le_sls_Peek(&obsPtr->sampleList);
+
+    if (linkPtr != NULL)
+    {
+        return CONTAINER_OF(linkPtr, BufferEntry_t, link);
+    }
+    else
+    {
+        return NULL;
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the next (newer) buffer entry in an Observation's data sample buffer.
+ *
+ * @return A pointer to the buffer entry, or NULL if there are no newer samples in the buffer.
+ */
+//--------------------------------------------------------------------------------------------------
+static BufferEntry_t* GetNextBufferEntry
+(
+    Observation_t* obsPtr,
+    BufferEntry_t* buffEntryPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    le_sls_Link_t* linkPtr = le_sls_PeekNext(&obsPtr->sampleList, &buffEntryPtr->link);
+
+    if (linkPtr != NULL)
+    {
+        return CONTAINER_OF(linkPtr, BufferEntry_t, link);
+    }
+    else
+    {
+        return NULL;
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Load the write buffer with a JSON representation of the next sample to be read.
  *
  * @return true if successful, false if there are no more samples.
@@ -343,15 +396,13 @@ static bool LoadReadOpBuffer
         if (le_mem_GetRefCount(opPtr->nextEntryPtr) == 1)
         {
             le_mem_Release(opPtr->nextEntryPtr);
-            le_sls_Link_t* linkPtr = le_sls_Peek(&opPtr->obsPtr->sampleList);
-            if (linkPtr != NULL)
+            opPtr->nextEntryPtr = GetOldestBufferEntry(opPtr->obsPtr);
+            if (opPtr->nextEntryPtr != NULL)
             {
-                opPtr->nextEntryPtr = CONTAINER_OF(linkPtr, BufferEntry_t, link);
                 le_mem_AddRef(opPtr->nextEntryPtr);
             }
             else
             {
-                opPtr->nextEntryPtr = NULL;
                 return false;
             }
         }
@@ -390,14 +441,13 @@ static bool LoadReadOpBuffer
         }
 
         // Advance the nextEntryPtr to the next entry in the Observation's data sample list.
-        le_sls_Link_t* linkPtr = le_sls_PeekNext(&opPtr->obsPtr->sampleList,
-                                                 &opPtr->nextEntryPtr->link);
+        BufferEntry_t* nextEntryPtr = GetNextBufferEntry(opPtr->obsPtr, opPtr->nextEntryPtr);
         le_mem_Release(opPtr->nextEntryPtr);
 
-        if (linkPtr != NULL)
+        if (nextEntryPtr != NULL)
         {
-            opPtr->nextEntryPtr = CONTAINER_OF(linkPtr, BufferEntry_t, link);
-            le_mem_AddRef(opPtr->nextEntryPtr);
+            opPtr->nextEntryPtr = nextEntryPtr;
+            le_mem_AddRef(nextEntryPtr);
         }
         else
         {
@@ -818,14 +868,12 @@ static bool WriteSamplesToFile
 )
 //--------------------------------------------------------------------------------------------------
 {
-    le_sls_Link_t* linkPtr = le_sls_Peek(&obsPtr->sampleList);
-
     io_DataType_t dataType = obsPtr->bufferedType;
 
-    while (linkPtr != NULL)
-    {
-        BufferEntry_t* buffEntryPtr = CONTAINER_OF(linkPtr, BufferEntry_t, link);
+    BufferEntry_t* buffEntryPtr = GetOldestBufferEntry(obsPtr);
 
+    while (buffEntryPtr != NULL)
+    {
         // Write the timestamp.
         double timestamp = dataSample_GetTimestamp(buffEntryPtr->sampleRef);
         if (!WriteToStream(file, &timestamp, sizeof(timestamp)))
@@ -888,7 +936,7 @@ static bool WriteSamplesToFile
             }
         }
 
-        linkPtr = le_sls_PeekNext(&obsPtr->sampleList, linkPtr);
+        buffEntryPtr = GetNextBufferEntry(obsPtr, buffEntryPtr);
     }
 
     return true;
@@ -2033,6 +2081,52 @@ void obs_DeleteUnusedBackupFiles
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Find the data sample at or after a given timestamp in a given Observation's buffer.
+ *
+ * @return a pointer to the buffer entry, or NULL if not found.
+ */
+//--------------------------------------------------------------------------------------------------
+static BufferEntry_t* FindBufferEntry
+(
+    Observation_t* obsPtr,
+    double startTime   ///< NAN for oldest; if < 30 years, count back from now; else absolute time.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    // Start at the oldest end and search forward.
+    BufferEntry_t* buffEntryPtr = GetOldestBufferEntry(obsPtr);
+
+    // If the buffer isn't empty and the startTime was specified,
+    if ((buffEntryPtr != NULL) && (!isnan(startTime)))
+    {
+        // If the start time is less than or equal to 30 years, then convert to an
+        // absolute timestamp by subtracting it from the current time.
+        if (startTime <= THIRTY_YEARS)
+        {
+            le_clk_Time_t now = le_clk_GetAbsoluteTime();
+            startTime = ((((double)(now.usec)) / 1000000) + now.sec) - startTime;
+        }
+
+        // Walk up the buffer looking for an entry that is the same age or newer than the
+        // specified start time.
+        do
+        {
+            if (dataSample_GetTimestamp(buffEntryPtr->sampleRef) >= startTime)
+            {
+                break;
+            }
+
+            buffEntryPtr = GetNextBufferEntry(obsPtr, buffEntryPtr);
+
+        } while (buffEntryPtr != NULL);
+    }
+
+    return buffEntryPtr;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Read data out of a buffer.  Data is written to a given file descriptor in JSON-encoded format
  * as an array of objects containing a timestamp and a value (or just a timestamp for triggers).
  * E.g.,
@@ -2056,38 +2150,13 @@ void obs_ReadBufferJson
 {
     Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
 
-    // Find the starting data sample in the Observation's buffer (starting at the oldest end).
-    BufferEntry_t* startPtr = NULL;
-    le_sls_Link_t* linkPtr = le_sls_Peek(&obsPtr->sampleList);
-    if (isnan(startAfter))
+    BufferEntry_t* startPtr = FindBufferEntry(obsPtr, startAfter);
+
+    // If the data sample found is an exact match for the startAfter time, then skip to the
+    // sample after that.
+    if (dataSample_GetTimestamp(startPtr->sampleRef) == startAfter)
     {
-        if (linkPtr != NULL)
-        {
-            startPtr = CONTAINER_OF(linkPtr, BufferEntry_t, link);
-        }
-    }
-    else
-    {
-        // If the startAfter time is less than or equal to 30 years, then convert to an
-        // absolute timestamp by subtracting it from the current time.
-        if (startAfter <= THIRTY_YEARS)
-        {
-            le_clk_Time_t now = le_clk_GetAbsoluteTime();
-            startAfter = ((((double)(now.usec)) / 1000000) + now.sec) - startAfter;
-        }
-
-        while (linkPtr != NULL)
-        {
-            BufferEntry_t* buffEntryPtr = CONTAINER_OF(linkPtr, BufferEntry_t, link);
-
-            if (dataSample_GetTimestamp(buffEntryPtr->sampleRef) > startAfter)
-            {
-                startPtr = buffEntryPtr;
-                break;
-            }
-
-            linkPtr = le_sls_PeekNext(&obsPtr->sampleList, linkPtr);
-        }
+        startPtr = GetNextBufferEntry(obsPtr, startPtr);
     }
 
     StartRead(obsPtr, startPtr, outputFile, handlerPtr, contextPtr);
@@ -2138,3 +2207,264 @@ const char* obs_GetJsonExtraction
     return obsPtr->jsonExtraction;
 }
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get buffer entry numerical value.  This works for numeric or Boolean types only.
+ *
+ * @return The value.
+ */
+//--------------------------------------------------------------------------------------------------
+static double GetBufferedNumber
+(
+    BufferEntry_t* buffEntryPtr,
+    io_DataType_t dataType
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (dataType == IO_DATA_TYPE_NUMERIC)
+    {
+        return dataSample_GetNumeric(buffEntryPtr->sampleRef);
+    }
+    else if (dataType == IO_DATA_TYPE_BOOLEAN)
+    {
+        if (dataSample_GetBoolean(buffEntryPtr->sampleRef))
+        {
+            return 1.0;
+        }
+        else
+        {
+            return 0.0;
+        }
+    }
+    else
+    {
+        LE_CRIT("Non-numerical data type %d.", dataType);
+        return NAN;
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the minimum value found in an Observation's data set within a given time span.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double obs_QueryMin
+(
+    res_Resource_t* resPtr,    ///< Ptr to Observation resource.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    // This only works for numeric or Boolean type data.
+    if (   (obsPtr->bufferedType != IO_DATA_TYPE_NUMERIC)
+        && (obsPtr->bufferedType != IO_DATA_TYPE_BOOLEAN)  )
+    {
+        return NAN;
+    }
+
+    BufferEntry_t* buffEntryPtr = FindBufferEntry(obsPtr, startTime);
+
+    double result = NAN;
+
+    while (buffEntryPtr != NULL)
+    {
+        double value = GetBufferedNumber(buffEntryPtr, obsPtr->bufferedType);
+
+        if (!isnan(value))
+        {
+            if (isnan(result) || (result > value))
+            {
+                result = value;
+            }
+        }
+
+        buffEntryPtr = GetNextBufferEntry(obsPtr, buffEntryPtr);
+    }
+
+    return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the maximum value found within a given time span in an Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double obs_QueryMax
+(
+    res_Resource_t* resPtr,    ///< Ptr to Observation resource.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    // This only works for numeric or Boolean type data.
+    if (   (obsPtr->bufferedType != IO_DATA_TYPE_NUMERIC)
+        && (obsPtr->bufferedType != IO_DATA_TYPE_BOOLEAN)  )
+    {
+        return NAN;
+    }
+
+    BufferEntry_t* buffEntryPtr = FindBufferEntry(obsPtr, startTime);
+
+    double result = NAN;
+
+    while (buffEntryPtr != NULL)
+    {
+        double value = GetBufferedNumber(buffEntryPtr, obsPtr->bufferedType);
+
+        if (!isnan(value))
+        {
+            if (isnan(result) || (result < value))
+            {
+                result = value;
+            }
+        }
+
+        buffEntryPtr = GetNextBufferEntry(obsPtr, buffEntryPtr);
+    }
+
+    return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the mean (average) of all values found within a given time span in an Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double obs_QueryMean
+(
+    res_Resource_t* resPtr,    ///< Ptr to Observation resource.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    // This only works for numeric or Boolean type data.
+    if (   (obsPtr->bufferedType != IO_DATA_TYPE_NUMERIC)
+        && (obsPtr->bufferedType != IO_DATA_TYPE_BOOLEAN)  )
+    {
+        return NAN;
+    }
+
+    BufferEntry_t* buffEntryPtr = FindBufferEntry(obsPtr, startTime);
+
+    double sum = 0;
+    size_t count = 0;
+
+    while (buffEntryPtr != NULL)
+    {
+        double value = GetBufferedNumber(buffEntryPtr, obsPtr->bufferedType);
+
+        if (!isnan(value))
+        {
+            sum += value;
+            count++;
+        }
+
+        buffEntryPtr = GetNextBufferEntry(obsPtr, buffEntryPtr);
+    }
+
+    if (count == 0)
+    {
+        return NAN;
+    }
+
+    return (sum / count);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the standard deviation of all values found within a given time span in an
+ * Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double obs_QueryStdDev
+(
+    res_Resource_t* resPtr,    ///< Ptr to Observation resource.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    // This only works for numeric or Boolean type data.
+    if (   (obsPtr->bufferedType != IO_DATA_TYPE_NUMERIC)
+        && (obsPtr->bufferedType != IO_DATA_TYPE_BOOLEAN)  )
+    {
+        return NAN;
+    }
+
+    BufferEntry_t* startEntryPtr = FindBufferEntry(obsPtr, startTime);
+
+    if (startEntryPtr == NULL)
+    {
+        return NAN;
+    }
+
+    double sum = 0;
+    size_t count = 0;
+
+    BufferEntry_t* buffEntryPtr = startEntryPtr;
+    while (buffEntryPtr != NULL)
+    {
+        double value = GetBufferedNumber(buffEntryPtr, obsPtr->bufferedType);
+
+        if (!isnan(value))
+        {
+            sum += value;
+            count++;
+        }
+
+        buffEntryPtr = GetNextBufferEntry(obsPtr, buffEntryPtr);
+    }
+
+    if (count == 0)
+    {
+        return NAN;
+    }
+
+    const double mean = (sum / count);
+
+    double sumOfSquaredDifferences = 0;
+
+    buffEntryPtr = startEntryPtr;
+    while (buffEntryPtr != NULL)
+    {
+        double value = GetBufferedNumber(buffEntryPtr, obsPtr->bufferedType);
+
+        if (!isnan(value))
+        {
+            double diff = value - mean;
+            sumOfSquaredDifferences += (diff * diff);
+        }
+
+        buffEntryPtr = GetNextBufferEntry(obsPtr, buffEntryPtr);
+    }
+
+    return sqrt(sumOfSquaredDifferences / count);
+}

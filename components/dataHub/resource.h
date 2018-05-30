@@ -779,4 +779,68 @@ const char* res_GetJsonExtraction
 );
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the minimum value found in an Observation's data set within a given time span.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double res_QueryMin
+(
+    res_Resource_t* resPtr,    ///< Ptr to Observation resource.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the maximum value found within a given time span in an Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double res_QueryMax
+(
+    res_Resource_t* resPtr,    ///< Ptr to Observation resource.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the mean (average) of all values found within a given time span in an Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double res_QueryMean
+(
+    res_Resource_t* resPtr,    ///< Ptr to Observation resource.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the standard deviation of all values found within a given time span in an
+ * Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double res_QueryStdDev
+(
+    res_Resource_t* resPtr,    ///< Ptr to Observation resource.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
 #endif // RESOURCE_H_INCLUDE_GUARD

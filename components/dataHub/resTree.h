@@ -873,4 +873,69 @@ const char* resTree_GetJsonExtraction
 );
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the minimum value found in an Observation's data set within a given time span.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double resTree_QueryMin
+(
+    resTree_EntryRef_t obsEntry,    ///< Observation entry.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the maximum value found within a given time span in an Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double resTree_QueryMax
+(
+    resTree_EntryRef_t obsEntry,    ///< Observation entry.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the mean (average) of all values found within a given time span in an Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double resTree_QueryMean
+(
+    resTree_EntryRef_t obsEntry,    ///< Observation entry.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the standard deviation of all values found within a given time span in an
+ * Observation's buffer.
+ *
+ * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's
+ *         buffer (if the buffer size is zero, the buffer is empty, or the buffer contains data
+ *         of a non-numerical type).
+ */
+//--------------------------------------------------------------------------------------------------
+double resTree_QueryStdDev
+(
+    resTree_EntryRef_t obsEntry,    ///< Observation entry.
+    double startTime    ///< If < 30 years then seconds before now; else seconds since the Epoch.
+);
+
+
 #endif // NAMESPACE_H_INCLUDE_GUARD

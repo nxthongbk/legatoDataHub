@@ -24,7 +24,6 @@ static enum
     ACTION_SET,
     ACTION_REMOVE,
     ACTION_PUSH,
-    ACTION_QUERY,
     ACTION_POLL,
     ACTION_READ,
     ACTION_WATCH,
@@ -50,6 +49,10 @@ static enum
     OBJECT_BACKUP_PERIOD,
     OBJECT_JSON_EXTRACTION,
     OBJECT_OBSERVATION,
+    OBJECT_MIN,
+    OBJECT_MAX,
+    OBJECT_MEAN,
+    OBJECT_STD_DEVIATION,
 }
 Object;
 
@@ -91,11 +94,10 @@ static void HandleHelpRequest
         "    dhub set backupPeriod PATH\n"
         "    dhub set jsonExtraction PATH\n"
         "    dhub remove OBJECT PATH\n"
-        "    dhub get OBJECT PATH\n"
         "    dhub push PATH [[--json] VALUE]\n"
         "    dhub watch [--json] PATH\n"
-//        "    dhub query PATH QUERY [--start=START]\n"
-        "    dhub read PATH [--start=START]\n"
+        "    dhub get OBJECT PATH [START]\n"
+        "    dhub read PATH [START]\n"
         "    dhub help\n"
         "    dhub -h\n"
         "    dhub --help\n"
@@ -177,21 +179,6 @@ static void HandleHelpRequest
         "            entire Observation resource, including all the settings\n"
         "            attached to it.\n"
         "\n"
-        "    dhub get OBJECT PATH\n"
-        "            Prints the state of an OBJECT associated with the resource at PATH.\n"
-        "            Valid values for OBJECT are:\n"
-        "              source\n"
-        "              default\n"
-        "              override\n"
-        "              minPeriod\n"
-        "              lowLimit\n"
-        "              highLimit\n"
-        "              changeBy\n"
-        "              jsonExtraction\n"
-        "            For the source, default, and override objects, the PATH must be\n"
-        "            absolute (beginning with '/'). The other objects are only found\n"
-        "            on Observations, so their PATH can be relative to /obs/.\n"
-        "\n"
         "    dhub push PATH [[--json] VALUE]\n"
         "            Pushes a VALUE to the the resource at PATH. If VALUE is omitted,\n"
         "            a trigger is pushed.  If VALUE is specified, --json (or -j) can\n"
@@ -205,7 +192,37 @@ static void HandleHelpRequest
         "           Print each update to stdout.  If --json specified, print as\n"
         "           a JSON object.\n"
         "\n"
-        "    dhub read PATH [--start=START]\n"
+        "    dhub get OBJECT PATH [START]\n"
+        "            Prints the state of an OBJECT associated with the resource at PATH.\n"
+        "            Valid values for OBJECT are:\n"
+        "              source\n"
+        "              default\n"
+        "              override\n"
+        "              minPeriod\n"
+        "              lowLimit\n"
+        "              highLimit\n"
+        "              changeBy\n"
+        "              jsonExtraction\n"
+        "              min\n"
+        "              max\n"
+        "              mean\n"
+        "              stddev\n"
+        "\n"
+        "            For the source, default, and override objects, the PATH must be\n"
+        "            absolute (beginning with '/'). The other objects are only found\n"
+        "            on Observations, so their PATH can be relative to /obs/.\n"
+        "\n"
+        "            When getting statistical measurements on an Observations' buffer\n"
+        "            of data samples (min, max, mean, and stddev), a start time (START)\n"
+        "            can optionally be specified.  If START is specified, then START is\n"
+        "            the time in seconds since the Unix Epoch (Jan 1, 1970, 00:00:00)\n"
+        "            at which reading will start.  If START is less than 30 years\n"
+        "            after the Epoch (946684800), then START will be subtracted from\n"
+        "            the current time to compute the start time.  E.g., 120 = compute\n"
+        "            the statistic using only data received within the last 2 minutes.\n"
+        "            If START is not specified, the entire buffer will be used.\n"
+        "\n"
+        "    dhub read PATH [START]\n"
         "            Reads the contents of the data sample buffer of the Observation\n"
         "            at PATH. PATH may be absolute or relative to /obs/. The data is\n"
         "            output to stdout in JSON format as an array of objects, each with\n"
@@ -213,9 +230,13 @@ static void HandleHelpRequest
         "\n"
         "              '[{\"t\":1537483647.125,\"v\":true},{\"t\":1537483657.128,\"v\":true}]'\n"
         "\n"
-        "            If the --start=START option is given, then START is the timestamp\n"
-        "            (in seconds since the Epoch) after which reading will start. If\n"
-        "            --start is not given, the entire buffer will be read.\n"
+        "            If START is specified, then START is the time in seconds since\n"
+        "            the Unix Epoch (Jan 1, 1970, 00:00:00) after which reading will\n"
+        "            start. If START is less than 30 years (946684800) after the\n"
+        "            Epoch, then START will be subtracted from the current time to\n"
+        "            compute the start time. E.g., 120 = read buffer contents less\n"
+        "            than 2 minutes old.  If START is not specified, the entire buffer\n"
+        "            will be read.\n"
         "\n"
         "    dhub help\n"
         "    dhub -h\n"
@@ -232,10 +253,10 @@ static void HandleHelpRequest
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Ptr to the PATH command-line argument, or "/" by default.
+ * Ptr to the PATH command-line argument, or NULL if there wasn't one provided.
  */
 //--------------------------------------------------------------------------------------------------
-static const char* PathArg = "/";
+static const char* PathArg = NULL;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -256,10 +277,10 @@ static const char* ValueArg = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Start timestamp argument for read commands.
+ * Start timestamp argument for 'read' and 'get min/max/mean/stddev' commands.
  */
 //--------------------------------------------------------------------------------------------------
-static double StartArg = (0.0 / 0.0);  // NAN by default
+static double StartArg = NAN;  // Not-a-number by default
 
 
 //--------------------------------------------------------------------------------------------------
@@ -1111,12 +1132,11 @@ static void SetDoubleSetting
 //--------------------------------------------------------------------------------------------------
 static void GetDoubleSetting
 (
-    const char* path,
     double (*getterFunc)(const char*)
 )
 //--------------------------------------------------------------------------------------------------
 {
-    double value = getterFunc(path);
+    double value = getterFunc(PathArg);
 
     if (!isnan(NAN))
     {
@@ -1164,14 +1184,44 @@ static void SetIntegerSetting
 //--------------------------------------------------------------------------------------------------
 static void GetIntegerSetting
 (
-    const char* path,
     uint32_t (*getterFunc)(const char*)
 )
 //--------------------------------------------------------------------------------------------------
 {
-    uint32_t value = getterFunc(path);
+    uint32_t value = getterFunc(PathArg);
 
     printf("%u\n", value);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get a buffer statistic.
+ */
+//--------------------------------------------------------------------------------------------------
+static void GetBufferStat
+(
+    double (*getterFunc)(const char*, double)
+)
+//--------------------------------------------------------------------------------------------------
+{
+    if (PathArg == NULL)
+    {
+        fprintf(stderr, "Missing PATH argument.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    double value = getterFunc(PathArg, StartArg);
+
+    if (isnan(value))
+    {
+        fprintf(stderr, "No numerical data buffered at resource path '%s'.\n", PathArg);
+        exit(EXIT_FAILURE);
+    }
+    else
+    {
+        printf("%lf\n", value);
+    }
 }
 
 
@@ -1207,6 +1257,12 @@ static void Push
 )
 //--------------------------------------------------------------------------------------------------
 {
+    if (PathArg == NULL)
+    {
+        fprintf(stderr, "Missing PATH argument.\n");
+        exit(EXIT_FAILURE);
+    }
+
     // If no value was specified, push a trigger.
     if (ValueArg == NULL)
     {
@@ -1473,12 +1529,44 @@ static void PathArgHandler
         case OBJECT_BACKUP_PERIOD:
         case OBJECT_JSON_EXTRACTION:
         case OBJECT_OBSERVATION:
+        case OBJECT_MIN:
+        case OBJECT_MAX:
+        case OBJECT_MEAN:
+        case OBJECT_STD_DEVIATION:
 
             PathArg = ValidateObservationPath(arg);
             break;
 
         default:
             LE_FATAL("Object unknown.");
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Command-line argument handler call-back for the START argument.
+ */
+//--------------------------------------------------------------------------------------------------
+static void StartArgHandler
+(
+    const char* arg
+)
+//--------------------------------------------------------------------------------------------------
+{
+    StartArg = ParseDouble(arg);
+
+    if (StartArg < 0)
+    {
+        fprintf(stderr, "Start time must be a positive number.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (errno != 0)
+    {
+        fprintf(stderr, "Error parsing START argument '%s'.\n"
+                        "Must be a positive number of seconds.\n", arg);
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -1538,6 +1626,22 @@ static void ObjectTypeArgHandler
     {
         Object = OBJECT_OBSERVATION;
     }
+    else if (strcmp(arg, "min") == 0)
+    {
+        Object = OBJECT_MIN;
+    }
+    else if (strcmp(arg, "max") == 0)
+    {
+        Object = OBJECT_MAX;
+    }
+    else if (strcmp(arg, "mean") == 0)
+    {
+        Object = OBJECT_MEAN;
+    }
+    else if (strcmp(arg, "stddev") == 0)
+    {
+        Object = OBJECT_STD_DEVIATION;
+    }
     else
     {
         fprintf(stderr, "Unknown object type '%s'.\n", arg);
@@ -1560,39 +1664,32 @@ static void ObjectTypeArgHandler
             fprintf(stderr, "Can't 'set' an Observation.\n");
             exit(EXIT_FAILURE);
         }
+        else if (   (Object == OBJECT_MIN)
+                 || (Object == OBJECT_MAX)
+                 || (Object == OBJECT_MEAN)
+                 || (Object == OBJECT_STD_DEVIATION)  )
+        {
+            fprintf(stderr, "Can't 'set' a buffer statistic.\n");
+            exit(EXIT_FAILURE);
+        }
         else
         {
             // Everything else needs a VALUE.
             le_arg_AddPositionalCallback(ValueArgHandler);
         }
     }
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Command-line argument handler call-back for the --start= option to the read command.
- */
-//--------------------------------------------------------------------------------------------------
-static void StartArgHandler
-(
-    const char* arg
-)
-//--------------------------------------------------------------------------------------------------
-{
-    StartArg = ParseDouble(arg);
-
-    if (StartArg < 0)
+    else if (Action == ACTION_GET)
     {
-        fprintf(stderr, "Start time must be a positive number.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (errno != 0)
-    {
-        fprintf(stderr, "Error parsing '--start=%s'.\n"
-                        "Must be a positive number of seconds.\n", arg);
-        exit(EXIT_FAILURE);
+        // If we are getting a buffer statistic,
+        if (   (Object == OBJECT_MIN)
+            || (Object == OBJECT_MAX)
+            || (Object == OBJECT_MEAN)
+            || (Object == OBJECT_STD_DEVIATION)  )
+        {
+            // Accept an optional START argument.
+            le_arg_AddPositionalCallback(StartArgHandler);
+            le_arg_AllowLessPositionalArgsThanCallbacks();
+        }
     }
 }
 
@@ -1616,9 +1713,10 @@ static void CommandArgHandler
     {
         Action = ACTION_LIST;
 
-        // Accept an optional PATH argument.
+        // Accept an optional PATH argument (default to "/").
         le_arg_AddPositionalCallback(PathArgHandler);
         le_arg_AllowLessPositionalArgsThanCallbacks();
+        PathArg = "/";
     }
     else if (strcmp(arg, "get") == 0)
     {
@@ -1665,8 +1763,9 @@ static void CommandArgHandler
         // Expect a path argument.
         le_arg_AddPositionalCallback(PathArgHandler);
 
-        // Accept an optional numerical --start= argument.
-        le_arg_SetStringCallback(StartArgHandler, NULL, "start");
+        // Accept an optional START argument.
+        le_arg_AddPositionalCallback(StartArgHandler);
+        le_arg_AllowLessPositionalArgsThanCallbacks();
     }
     else
     {
@@ -1747,32 +1846,32 @@ COMPONENT_INIT
 
                 case OBJECT_MIN_PERIOD:
 
-                    GetDoubleSetting(PathArg, admin_GetMinPeriod);
+                    GetDoubleSetting(admin_GetMinPeriod);
                     break;
 
                 case OBJECT_LOW_LIMIT:
 
-                    GetDoubleSetting(PathArg, admin_GetLowLimit);
+                    GetDoubleSetting(admin_GetLowLimit);
                     break;
 
                 case OBJECT_HIGH_LIMIT:
 
-                    GetDoubleSetting(PathArg, admin_GetHighLimit);
+                    GetDoubleSetting(admin_GetHighLimit);
                     break;
 
                 case OBJECT_CHANGE_BY:
 
-                    GetDoubleSetting(PathArg, admin_GetChangeBy);
+                    GetDoubleSetting(admin_GetChangeBy);
                     break;
 
                 case OBJECT_BUFFER_SIZE:
 
-                    GetIntegerSetting(PathArg, admin_GetBufferMaxCount);
+                    GetIntegerSetting(admin_GetBufferMaxCount);
                     break;
 
                 case OBJECT_BACKUP_PERIOD:
 
-                    GetIntegerSetting(PathArg, admin_GetBufferBackupPeriod);
+                    GetIntegerSetting(admin_GetBufferBackupPeriod);
                     break;
 
                 case OBJECT_JSON_EXTRACTION:
@@ -1795,6 +1894,26 @@ COMPONENT_INIT
 
                     fprintf(stderr, "Can't 'get' an Observation.\n");
                     exit(EXIT_FAILURE);
+
+                case OBJECT_MIN:
+
+                    GetBufferStat(query_GetMin);
+                    break;
+
+                case OBJECT_MAX:
+
+                    GetBufferStat(query_GetMax);
+                    break;
+
+                case OBJECT_MEAN:
+
+                    GetBufferStat(query_GetMean);
+                    break;
+
+                case OBJECT_STD_DEVIATION:
+
+                    GetBufferStat(query_GetStdDev);
+                    break;
             }
             break;
 
@@ -1858,6 +1977,14 @@ COMPONENT_INIT
 
                     fprintf(stderr, "Can't 'set' an Observation.\n");
                     exit(EXIT_FAILURE);
+
+                case OBJECT_MIN:
+                case OBJECT_MAX:
+                case OBJECT_MEAN:
+                case OBJECT_STD_DEVIATION:
+
+                    fprintf(stderr, "Can't 'set' a buffered data statistic.\n");
+                    exit(EXIT_FAILURE);
             }
 
             admin_EndUpdate();
@@ -1912,7 +2039,7 @@ COMPONENT_INIT
                 case OBJECT_BUFFER_SIZE:
                 case OBJECT_BACKUP_PERIOD:
 
-                    fprintf(stderr, "These cannot be removed. Do you mean to set them to zero?\n");
+                    fprintf(stderr, "This cannot be removed. Do you mean to set it to zero?\n");
                     exit(EXIT_FAILURE);
 
                 case OBJECT_JSON_EXTRACTION:
@@ -1924,6 +2051,14 @@ COMPONENT_INIT
 
                     admin_DeleteObs(PathArg);
                     break;
+
+                case OBJECT_MIN:
+                case OBJECT_MAX:
+                case OBJECT_MEAN:
+                case OBJECT_STD_DEVIATION:
+
+                    fprintf(stderr, "Buffered data statistics cannot be removed.\n");
+                    exit(EXIT_FAILURE);
             }
 
             admin_EndUpdate();
@@ -1935,6 +2070,12 @@ COMPONENT_INIT
             return;  // Return so that we enter the event loop and get push handler call-backs.
 
         case ACTION_READ:
+
+            if (PathArg == NULL)
+            {
+                fprintf(stderr, "Missing PATH argument.\n");
+                exit(EXIT_FAILURE);
+            }
 
             if (   query_ReadBufferJson(PathArg, StartArg, dup(fileno(stdout)), ReadComplete, NULL)
                 != LE_OK )
