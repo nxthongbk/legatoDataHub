@@ -795,7 +795,12 @@ static void PrintEntry
 
     admin_EntryType_t entryType = admin_GetEntryType(path);
 
-    if (entryType == ADMIN_ENTRY_TYPE_NAMESPACE)
+    if (entryType == ADMIN_ENTRY_TYPE_NONE)
+    {
+        fprintf(stderr, "No resource at path '%s'.\n", path);
+        exit(EXIT_FAILURE);
+    }
+    else if (entryType == ADMIN_ENTRY_TYPE_NAMESPACE)
     {
         // There's not much to print for a Namespace.
         Indent(depth);
@@ -1111,7 +1116,7 @@ static void SetDoubleSetting
     {
         if (admin_CreateObs(path) != LE_OK)
         {
-            fprintf(stderr, "Invalid resource path for Observation.");
+            fprintf(stderr, "Invalid resource path for Observation.\n");
             exit(EXIT_FAILURE);
         }
 
@@ -1163,13 +1168,13 @@ static void SetIntegerSetting
     int value;
     if ((le_utf8_ParseInt(&value, valueStr) != LE_OK) || (value < 0))
     {
-        fprintf(stderr, "Non-negative integer value required.");
+        fprintf(stderr, "Non-negative integer value required.\n");
         exit(EXIT_FAILURE);
     }
 
     if (admin_CreateObs(path) != LE_OK)
     {
-        fprintf(stderr, "Invalid resource path for Observation.");
+        fprintf(stderr, "Invalid resource path for Observation.\n");
         exit(EXIT_FAILURE);
     }
 
