@@ -128,7 +128,10 @@ void res_Construct
     resPtr->destList = LE_DLS_LIST_INIT;
     resPtr->destListLink = LE_DLS_LINK_INIT;
     resPtr->overrideValue = NULL;
+    resPtr->overrideType = IO_DATA_TYPE_TRIGGER;
     resPtr->defaultValue = NULL;
+    resPtr->defaultType = IO_DATA_TYPE_TRIGGER;
+    resPtr->isConfigChanging = false;
     resPtr->pushHandlerList = LE_DLS_LIST_INIT;
     resPtr->jsonExample = NULL;
 }
