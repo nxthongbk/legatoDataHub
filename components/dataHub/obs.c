@@ -694,7 +694,29 @@ static void AddToBuffer
 )
 //--------------------------------------------------------------------------------------------------
 {
-    BufferEntry_t* buffEntryPtr = le_mem_ForceAlloc(BufferEntryPool);
+    BufferEntry_t* buffEntryPtr;
+
+    // If the new sample is timestamped older than the newest sample already in the buffer,
+    // then we have a serious problem, because buffer traversal operations could get stuck in loops.
+    le_sls_Link_t* linkPtr = le_sls_PeekTail(&obsPtr->sampleList);
+    if (linkPtr != NULL)
+    {
+        buffEntryPtr = CONTAINER_OF(linkPtr, BufferEntry_t, link);
+
+        double oldEntryTimestamp = dataSample_GetTimestamp(buffEntryPtr->sampleRef);
+        double newEntryTimestamp = dataSample_GetTimestamp(sampleRef);
+
+        if (oldEntryTimestamp > newEntryTimestamp)
+        {
+            LE_ERROR("New sample has older timestamp than (older) sample already in the buffer!");
+            LE_ERROR("Dropping new sample timestamped %lf (< %lf in buffer)!",
+                     newEntryTimestamp,
+                     oldEntryTimestamp);
+            return;
+        }
+    }
+
+    buffEntryPtr = le_mem_ForceAlloc(BufferEntryPool);
 
     le_mem_AddRef(sampleRef);
     buffEntryPtr->sampleRef = sampleRef;
@@ -2154,12 +2176,48 @@ void obs_ReadBufferJson
 
     // If the data sample found is an exact match for the startAfter time, then skip to the
     // sample after that.
-    if (dataSample_GetTimestamp(startPtr->sampleRef) == startAfter)
+    if ((startPtr != NULL) && (dataSample_GetTimestamp(startPtr->sampleRef) == startAfter))
     {
         startPtr = GetNextBufferEntry(obsPtr, startPtr);
     }
 
     StartRead(obsPtr, startPtr, outputFile, handlerPtr, contextPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Find the oldest data sample in a given Observation's buffer that is newer than a given timestamp.
+ *
+ * @return Reference to the sample, or NULL if not found in buffer.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t obs_FindBufferedSampleAfter
+(
+    res_Resource_t* resPtr, ///< Ptr to the resource object for the Observation.
+    double startAfter   ///< Start after this many seconds ago, or after an absolute number of
+                        ///< seconds since the Epoch (if startafter > 30 years).
+                        ///< Use NAN (not a number) to find the oldest.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    BufferEntry_t* startPtr = FindBufferEntry(obsPtr, startAfter);
+
+    // If the data sample found is an exact match for the startAfter time, then skip to the
+    // sample after that.
+    if ((startPtr != NULL) && (dataSample_GetTimestamp(startPtr->sampleRef) == startAfter))
+    {
+        startPtr = GetNextBufferEntry(obsPtr, startPtr);
+    }
+
+    if (startPtr != NULL)
+    {
+        return startPtr->sampleRef;
+    }
+
+    return NULL;
 }
 
 

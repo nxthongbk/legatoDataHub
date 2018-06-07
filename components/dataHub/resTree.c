@@ -1582,6 +1582,30 @@ void resTree_ReadBufferJson
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Find the oldest data sample held in a given Observation's buffer that is newer than a
+ * given timestamp.
+ *
+ * @return Reference to the sample, or NULL if not found.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t resTree_FindBufferedSampleAfter
+(
+    resTree_EntryRef_t obsEntry, ///< Observation resource entry.
+    double startAfter   ///< Start after this many seconds ago, or after an absolute number of
+                        ///< seconds since the Epoch (if startafter > 30 years).
+                        ///< Use NAN (not a number) to find the oldest.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    LE_ASSERT(obsEntry->resourcePtr != NULL);
+    LE_ASSERT(obsEntry->type == ADMIN_ENTRY_TYPE_OBSERVATION);
+
+    return res_FindBufferedSampleAfter(obsEntry->resourcePtr, startAfter);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set the JSON example value for a given resource.
  */
 //--------------------------------------------------------------------------------------------------

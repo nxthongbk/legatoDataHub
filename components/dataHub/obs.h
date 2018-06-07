@@ -300,6 +300,22 @@ void obs_ReadBufferJson
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Find the oldest data sample in a given Observation's buffer that is newer than a given timestamp.
+ *
+ * @return Reference to the sample, or NULL if not found in buffer.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t obs_FindBufferedSampleAfter
+(
+    res_Resource_t* resPtr, ///< Ptr to the resource object for the Observation.
+    double startAfter   ///< Start after this many seconds ago, or after an absolute number of
+                        ///< seconds since the Epoch (if startafter > 30 years).
+                        ///< Use NAN (not a number) to find the oldest.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set the JSON member/element specifier for extraction of data from within a structured JSON
  * value received by a given Observation.
  *

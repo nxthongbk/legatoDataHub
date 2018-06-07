@@ -114,6 +114,298 @@ le_result_t query_ReadBufferJson
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Read the timestamp of a single sample from a buffer.
+ *
+ * @note This can be used with any type of sample.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist or does not have a sample newer than the given
+ *                 startAfter timestamp.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t query_ReadBufferSampleTimestamp
+(
+    const char* obsPath,
+        ///< [IN] Observation path. Can be absolute
+        ///< (beginning with a '/') or relative to /obs/.
+    double startAfter,
+        ///< [IN] Start after this many seconds ago,
+        ///< or after an absolute number of seconds since the Epoch
+        ///< (if startafter > 30 years).
+        ///< Use NAN (not a number) to read the oldest sample in the buffer.
+    double* timestampPtr
+        ///< [OUT] Timestamp of the sample, if LE_OK returned.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entryRef = FindObservation(obsPath);
+
+    if (entryRef == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    if (startAfter < 0)
+    {
+        LE_KILL_CLIENT("Negative startAfter time provided (%lf).", startAfter);
+        return LE_OK;   // Doesn't matter what we return.
+    }
+
+    dataSample_Ref_t sample = resTree_FindBufferedSampleAfter(entryRef, startAfter);
+
+    if (sample == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    *timestampPtr = dataSample_GetTimestamp(sample);
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read a single Boolean sample from a buffer.
+ *
+ * @warning This can only be used with Boolean type samples.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist or does not have a Boolean sample newer than
+ *                 the given startAfter timestamp.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t query_ReadBufferSampleBoolean
+(
+    const char* obsPath,
+        ///< [IN] Observation path. Can be absolute
+        ///< (beginning with a '/') or relative to /obs/.
+    double startAfter,
+        ///< [IN] Start after this many seconds ago,
+        ///< or after an absolute number of seconds since the Epoch
+        ///< (if startafter > 30 years).
+        ///< Use NAN (not a number) to read the oldest sample in the buffer.
+    double* timestampPtr,
+        ///< [OUT] Timestamp of the sample, if LE_OK returned.
+    bool* valuePtr
+        ///< [OUT] Value of the sample, if LE_OK returned.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entryRef = FindObservation(obsPath);
+
+    if (entryRef == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    if (startAfter < 0)
+    {
+        LE_KILL_CLIENT("Negative startAfter time provided (%lf).", startAfter);
+        return LE_OK;   // Doesn't matter what we return.
+    }
+
+    if (resTree_GetDataType(entryRef) != IO_DATA_TYPE_BOOLEAN)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    dataSample_Ref_t sample = resTree_FindBufferedSampleAfter(entryRef, startAfter);
+
+    if (sample == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    *timestampPtr = dataSample_GetTimestamp(sample);
+    *valuePtr = dataSample_GetBoolean(sample);
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read a single numeric sample from a buffer.
+ *
+ * @warning This can only be used with numeric type samples.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist or does not have a Numeric sample newer than
+ *                 the given startAfter timestamp.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t query_ReadBufferSampleNumeric
+(
+    const char* obsPath,
+        ///< [IN] Observation path. Can be absolute
+        ///< (beginning with a '/') or relative to /obs/.
+    double startAfter,
+        ///< [IN] Start after this many seconds ago,
+        ///< or after an absolute number of seconds since the Epoch
+        ///< (if startafter > 30 years).
+        ///< Use NAN (not a number) to read the oldest sample in the buffer.
+    double* timestampPtr,
+        ///< [OUT] Timestamp of the sample, if LE_OK returned.
+    double* valuePtr
+        ///< [OUT] Value of the sample, if LE_OK returned.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entryRef = FindObservation(obsPath);
+
+    if (entryRef == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    if (startAfter < 0)
+    {
+        LE_KILL_CLIENT("Negative startAfter time provided (%lf).", startAfter);
+        return LE_OK;   // Doesn't matter what we return.
+    }
+
+    if (resTree_GetDataType(entryRef) != IO_DATA_TYPE_NUMERIC)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    dataSample_Ref_t sample = resTree_FindBufferedSampleAfter(entryRef, startAfter);
+
+    if (sample == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    *timestampPtr = dataSample_GetTimestamp(sample);
+    *valuePtr = dataSample_GetNumeric(sample);
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read a single sample from a buffer as a string.
+ *
+ * @note This can be used with any type of sample.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist or does not have a sample newer than the given
+ *                 startAfter timestamp.
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the value.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t query_ReadBufferSampleString
+(
+    const char* LE_NONNULL obsPath,
+        ///< [IN] Observation path. Can be absolute
+        ///< (beginning with a '/') or relative to /obs/.
+    double startAfter,
+        ///< [IN] Start after this many seconds ago,
+        ///< or after an absolute number of seconds since the Epoch
+        ///< (if startafter > 30 years).
+        ///< Use NAN (not a number) to read the oldest sample in the buffer.
+    double* timestampPtr,
+        ///< [OUT] Timestamp of the sample, if LE_OK returned.
+    char* value,
+        ///< [OUT] Value of the sample, if LE_OK returned.
+    size_t valueSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entryRef = FindObservation(obsPath);
+
+    if (entryRef == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    if (startAfter < 0)
+    {
+        LE_KILL_CLIENT("Negative startAfter time provided (%lf).", startAfter);
+        return LE_OK;   // Doesn't matter what we return.
+    }
+
+    dataSample_Ref_t sample = resTree_FindBufferedSampleAfter(entryRef, startAfter);
+
+    if (sample == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    *timestampPtr = dataSample_GetTimestamp(sample);
+
+    return dataSample_ConvertToString(sample, resTree_GetDataType(entryRef), value, valueSize);
+}
+
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read a single sample from a buffer as JSON.
+ *
+ * @note This can be used with any type of sample.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist or does not have a sample newer than the given
+ *                 startAfter timestamp.
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the value.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t query_ReadBufferSampleJson
+(
+    const char* LE_NONNULL obsPath,
+        ///< [IN] Observation path. Can be absolute
+        ///< (beginning with a '/') or relative to /obs/.
+    double startAfter,
+        ///< [IN] Start after this many seconds ago,
+        ///< or after an absolute number of seconds since the Epoch
+        ///< (if startafter > 30 years).
+        ///< Use NAN (not a number) to read the oldest sample in the buffer.
+    double* timestampPtr,
+        ///< [OUT] Timestamp of the sample, if LE_OK returned.
+    char* value,
+        ///< [OUT] Value of the sample, if LE_OK returned.
+    size_t valueSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t entryRef = FindObservation(obsPath);
+
+    if (entryRef == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    if (startAfter < 0)
+    {
+        LE_KILL_CLIENT("Negative startAfter time provided (%lf).", startAfter);
+        return LE_OK;   // Doesn't matter what we return.
+    }
+
+    dataSample_Ref_t sample = resTree_FindBufferedSampleAfter(entryRef, startAfter);
+
+    if (sample == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    *timestampPtr = dataSample_GetTimestamp(sample);
+
+    return dataSample_ConvertToJson(sample, resTree_GetDataType(entryRef), value, valueSize);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get the minimum value found in an Observation's data set within a given time span.
  *
  * @return The value, or NAN (not-a-number) if there's no numerical data in the Observation's

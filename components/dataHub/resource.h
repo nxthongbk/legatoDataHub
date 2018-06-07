@@ -726,6 +726,23 @@ void res_ReadBufferJson
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Find the oldest data sample held in a given Observation's buffer that is newer than a
+ * given timestamp.
+ *
+ * @return Reference to the sample, or NULL if not found.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t res_FindBufferedSampleAfter
+(
+    res_Resource_t* resPtr, ///< Ptr to the resource object.
+    double startAfter   ///< Start after this many seconds ago, or after an absolute number of
+                        ///< seconds since the Epoch (if startafter > 30 years).
+                        ///< Use NAN (not a number) to find the oldest.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set the JSON example value for a given resource.
  */
 //--------------------------------------------------------------------------------------------------

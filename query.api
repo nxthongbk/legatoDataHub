@@ -26,7 +26,15 @@
  *  - query_GetJson() - get the current value of the resource in JSON format (with any data type)
  *
  * All Observations that have non-zero buffer sizes with any type of data in them can have
- * data fetched from their buffers in JSON format using query_ReadBufferJson().
+ * batches of samples fetched from their buffers in JSON format using
+ *  - query_ReadBufferJson().
+ *
+ * Alternatively, single samples can be fetched from a buffer using one of the following:
+ *  - query_ReadBufferSampleTimestamp()
+ *  - query_ReadBufferSampleBoolean()
+ *  - query_ReadBufferSampleNumeric()
+ *  - query_ReadBufferSampleString()
+ *  - query_ReadBufferSampleJson()
  *
  * If a JSON-type Input resource has provided an example of what its data samples might look like,
  * it can be fetched using query_GetJsonExample().
@@ -110,6 +118,132 @@ FUNCTION le_result_t ReadBufferJson
                           ///< Use NAN (not a number) to read the whole buffer.
     file outputFile IN, ///< File descriptor to write the data to.
     ReadCompletion completionFunc IN ///< Completion callback to be called when operation finishes.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read the timestamp of a single sample from a buffer.
+ *
+ * @note This can be used with any type of sample.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist or does not have a sample newer than the given
+ *                 startAfter timestamp.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t ReadBufferSampleTimestamp
+(
+    string obsPath[io.MAX_RESOURCE_PATH_LEN] IN, ///< Observation path. Can be absolute
+                                                 ///< (beginning with a '/') or relative to /obs/.
+    double startAfter IN, ///< Start after this many seconds ago,
+                          ///< or after an absolute number of seconds since the Epoch
+                          ///< (if startafter > 30 years).
+                          ///< Use NAN (not a number) to read the oldest sample in the buffer.
+    double timestamp OUT ///< Timestamp of the sample, if LE_OK returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read a single Boolean sample from a buffer.
+ *
+ * @warning This can only be used with Boolean type samples.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist or does not have a Boolean sample newer than
+ *                 the given startAfter timestamp.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t ReadBufferSampleBoolean
+(
+    string obsPath[io.MAX_RESOURCE_PATH_LEN] IN, ///< Observation path. Can be absolute
+                                                 ///< (beginning with a '/') or relative to /obs/.
+    double startAfter IN, ///< Start after this many seconds ago,
+                          ///< or after an absolute number of seconds since the Epoch
+                          ///< (if startafter > 30 years).
+                          ///< Use NAN (not a number) to read the oldest sample in the buffer.
+    double timestamp OUT,///< Timestamp of the sample, if LE_OK returned.
+    bool value OUT  ///< Value of the sample, if LE_OK returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read a single numeric sample from a buffer.
+ *
+ * @warning This can only be used with numeric type samples.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist or does not have a Numeric sample newer than
+ *                 the given startAfter timestamp.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t ReadBufferSampleNumeric
+(
+    string obsPath[io.MAX_RESOURCE_PATH_LEN] IN, ///< Observation path. Can be absolute
+                                                 ///< (beginning with a '/') or relative to /obs/.
+    double startAfter IN, ///< Start after this many seconds ago,
+                          ///< or after an absolute number of seconds since the Epoch
+                          ///< (if startafter > 30 years).
+                          ///< Use NAN (not a number) to read the oldest sample in the buffer.
+    double timestamp OUT,///< Timestamp of the sample, if LE_OK returned.
+    double value OUT  ///< Value of the sample, if LE_OK returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read a single sample from a buffer as a string.
+ *
+ * @note This can be used with any type of sample.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist or does not have a sample newer than the given
+ *                 startAfter timestamp.
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the value.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t ReadBufferSampleString
+(
+    string obsPath[io.MAX_RESOURCE_PATH_LEN] IN, ///< Observation path. Can be absolute
+                                                 ///< (beginning with a '/') or relative to /obs/.
+    double startAfter IN, ///< Start after this many seconds ago,
+                          ///< or after an absolute number of seconds since the Epoch
+                          ///< (if startafter > 30 years).
+                          ///< Use NAN (not a number) to read the oldest sample in the buffer.
+    double timestamp OUT,///< Timestamp of the sample, if LE_OK returned.
+    string value[io.MAX_STRING_VALUE_LEN] OUT  ///< Value of the sample, if LE_OK returned.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read a single sample from a buffer as JSON.
+ *
+ * @note This can be used with any type of sample.
+ *
+ * @return
+ *  - LE_OK if successful.
+ *  - LE_NOT_FOUND if the Observation doesn't exist or does not have a sample newer than the given
+ *                 startAfter timestamp.
+ *  - LE_OVERFLOW if the buffer provided is too small to hold the value.
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION le_result_t ReadBufferSampleJson
+(
+    string obsPath[io.MAX_RESOURCE_PATH_LEN] IN, ///< Observation path. Can be absolute
+                                                 ///< (beginning with a '/') or relative to /obs/.
+    double startAfter IN, ///< Start after this many seconds ago,
+                          ///< or after an absolute number of seconds since the Epoch
+                          ///< (if startafter > 30 years).
+                          ///< Use NAN (not a number) to read the oldest sample in the buffer.
+    double timestamp OUT,///< Timestamp of the sample, if LE_OK returned.
+    string value[io.MAX_STRING_VALUE_LEN] OUT  ///< Value of the sample, if LE_OK returned.
 );
 
 
