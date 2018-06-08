@@ -260,7 +260,7 @@ void ioPoint_DoTypeCoercion
 
                 case IO_DATA_TYPE_JSON:
                 {
-                    double newValue = json_ConvertToNumeric(dataSample_GetJson(fromSample));
+                    double newValue = json_ConvertToNumber(dataSample_GetJson(fromSample));
                     toSample = dataSample_CreateNumeric(timestamp, newValue);
                     break;
                 }

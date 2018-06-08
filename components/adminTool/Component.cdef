@@ -19,9 +19,14 @@ requires:
         query.api [manual-start]
         io.api [manual-start]
     }
+
+    component:
+    {
+        ../json
+    }
 }
 
 cflags:
 {
-    -std=c99
+    -I$CURDIR/../json
 }

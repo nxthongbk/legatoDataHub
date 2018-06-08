@@ -8,7 +8,7 @@
 //--------------------------------------------------------------------------------------------------
 
 #include "interfaces.h"
-
+#include "json.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1293,7 +1293,12 @@ static void Push
         {
             admin_PushNumeric(PathArg, IO_NOW, number);
         }
-        // If that didn't work, treat as a string.
+        // If that didn't work, if it's valid JSON, push it as JSON.
+        else if (json_IsValid(ValueArg))
+        {
+            admin_PushJson(PathArg, IO_NOW, ValueArg);
+        }
+        // Otherwise, treat as a string.
         else
         {
             admin_PushString(PathArg, IO_NOW, ValueArg);

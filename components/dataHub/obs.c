@@ -1450,14 +1450,15 @@ le_result_t obs_DoJsonExtraction
     {
         if (*dataTypePtr != IO_DATA_TYPE_JSON)
         {
+            LE_WARN("Ignoring non-JSON value pushed to observation configured to extract JSON.");
             return LE_FAULT;
         }
 
         // Extract the appropriate JSON data element from the value.
         io_DataType_t extractedType;
-        dataSample_Ref_t extractedValue = json_Extract(*valueRefPtr,
-                                                       obsPtr->jsonExtraction,
-                                                       &extractedType);
+        dataSample_Ref_t extractedValue = dataSample_ExtractJson(*valueRefPtr,
+                                                                 obsPtr->jsonExtraction,
+                                                                 &extractedType);
         if (extractedValue == NULL)
         {
             // Extraction failed.

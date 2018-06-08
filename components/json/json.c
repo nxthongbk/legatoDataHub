@@ -9,10 +9,6 @@
 //--------------------------------------------------------------------------------------------------
 
 #include "legato.h"
-#include "interfaces.h"
-#include "dataHub.h"
-#include "nan.h"
-#include "dataSample.h"
 #include "json.h"
 
 
@@ -380,42 +376,51 @@ static const char* SkipArray
 /**
  * Find the array element at a given index in the JSON array.
  *
- * @return Pointer to the first character in the element, or NULL if not found.
+ * @return
+ *  - LE_OK if successful,
+ *  - LE_FORMAT_ERROR if the original JSON input string is malformed,
+ *  - LE_NOT_FOUND if the thing specified in the extraction spec is not found in the JSON input.
  */
 //--------------------------------------------------------------------------------------------------
-static const char* GoToElement
+static le_result_t GoToElement
 (
     const char* valPtr,
-    long int index
+    long int index,
+    const char** resultPtrPtr ///< [OUT] Ptr to where to put ptr to start of element if LE_OK returned.
 )
 //--------------------------------------------------------------------------------------------------
 {
     if (*valPtr != '[')
     {
-        return NULL;
+        return LE_FORMAT_ERROR;
     }
 
     valPtr++;   // Skip '['
     valPtr = SkipWhitespace(valPtr);
+
+    // Until we find the ith entry, skip values and the commas after them.
     for (size_t i = 0; i != index; i++)
     {
+        if (*valPtr == ']')
+        {
+            // The element doesn't exist in the array.
+            return LE_NOT_FOUND;
+        }
+
         valPtr = SkipWhitespace(SkipValue(valPtr));
 
         if ((valPtr == NULL) || (*valPtr != ','))
         {
-            return NULL;
+            return LE_FORMAT_ERROR;
         }
 
         valPtr++;   // Skip ','
         valPtr = SkipWhitespace(valPtr);
     }
 
-    if (*valPtr == '\0')
-    {
-        return NULL;
-    }
+    *resultPtrPtr = valPtr;
 
-    return valPtr;
+    return LE_OK;
 }
 
 
@@ -423,19 +428,23 @@ static const char* GoToElement
 /**
  * Find the object member with a given name in the JSON object.
  *
- * @return Pointer to the first character in the member's value, or NULL if not found.
+ * @return
+ *  - LE_OK if successful,
+ *  - LE_FORMAT_ERROR if the original JSON input string is malformed,
+ *  - LE_NOT_FOUND if the thing specified in the extraction spec is not found in the JSON input.
  */
 //--------------------------------------------------------------------------------------------------
-static const char* GoToMember
+static le_result_t GoToMember
 (
     const char* valPtr,
-    const char* memberName
+    const char* memberName,
+    const char** resultPtrPtr ///< [OUT] Ptr to where to put ptr to start of member if LE_OK rtrned.
 )
 //--------------------------------------------------------------------------------------------------
 {
     if (*valPtr != '{')
     {
-        return NULL;
+        return LE_FORMAT_ERROR;
     }
 
     size_t nameLen = strlen(memberName);
@@ -443,7 +452,8 @@ static const char* GoToMember
     valPtr++;   // Skip '{'
     valPtr = SkipWhitespace(valPtr);
 
-    // If we find something other than a '"' beginning a member name, then the JSON is malformed.
+    // If we find something other than a '"' (or '}') beginning a member name,
+    // then the JSON is malformed.
     while (*valPtr == '"')
     {
         // If the member name matches,
@@ -453,10 +463,11 @@ static const char* GoToMember
             if (*valPtr != ':')
             {
                 LE_ERROR("Missing colon after JSON object member name '%s'.", memberName);
-                return NULL;
+                return LE_FORMAT_ERROR;
             }
 
-            return SkipWhitespace(valPtr + 1);
+            *resultPtrPtr = SkipWhitespace(valPtr + 1);
+            return LE_OK;
         }
 
         // The member name doesn't match, so skip over this member.
@@ -466,14 +477,19 @@ static const char* GoToMember
         // meaning there will be more members to follow.
         if ((valPtr == NULL) || (*valPtr != ','))
         {
-            return NULL;
+            return LE_FORMAT_ERROR;
         }
 
         valPtr++;   // Skip ','
         valPtr = SkipWhitespace(valPtr);
     }
 
-    return NULL;
+    if (*valPtr == '}')
+    {
+        return LE_NOT_FOUND;
+    }
+
+    return LE_FORMAT_ERROR;
 }
 
 
@@ -522,13 +538,18 @@ static const char* GetMemberName
  *
  * The extraction specifiers look like "x" or "x.y" or "[3]" or "x[3].y", etc.
  *
- * @return Ptr to the first character, or NULL if failed.
+ * @return
+ *  - LE_OK if successful,
+ *  - LE_FORMAT_ERROR if the original JSON input string is malformed,
+ *  - LE_BAD_PARAMETER if the extraction spec is invalid,
+ *  - LE_NOT_FOUND if the thing specified in the extraction spec is not found in the JSON input.
  */
 //--------------------------------------------------------------------------------------------------
-static const char* Find
+static le_result_t Find
 (
     const char* original,       ///< [IN] Original JSON string to extract from.
-    const char* extractionSpec  ///< [IN] the extraction specification.
+    const char* extractionSpec, ///< [IN] Extraction specification.
+    const char** resultPtrPtr   ///< [OUT] Ptr to where the ptr to the value should go if LE_OK.
 )
 //--------------------------------------------------------------------------------------------------
 {
@@ -541,7 +562,8 @@ static const char* Find
         {
             case '\0':
 
-                return valPtr;
+                *resultPtrPtr = valPtr;
+                return LE_OK;
 
             case '[':
             {
@@ -553,7 +575,11 @@ static const char* Find
                 }
                 specPtr = endPtr + 1;
 
-                valPtr = GoToElement(valPtr, index);
+                le_result_t r = GoToElement(valPtr, index, &valPtr);
+                if (r != LE_OK)
+                {
+                    return r;
+                }
 
                 break;
             }
@@ -571,27 +597,31 @@ static const char* Find
                     goto badSpec;
                 }
 
-                char memberName[ADMIN_MAX_JSON_EXTRACTOR_LEN];
+                char memberName[128];   // Arbitrary number bigger than any member name should be.
                 specPtr = GetMemberName(specPtr, memberName, sizeof(memberName));
                 if (specPtr == NULL)
                 {
                     goto badSpec;
                 }
 
-                valPtr = GoToMember(valPtr, memberName);
+                le_result_t r = GoToMember(valPtr, memberName, &valPtr);
+                if (r != LE_OK)
+                {
+                    return r;
+                }
 
                 break;
             }
         }
     }
 
-    LE_WARN("'%s' not found in JSON value '%s'.", extractionSpec, original);
-    return NULL;
+    LE_DEBUG("'%s' not found in JSON value '%s'.", extractionSpec, original);
+    return LE_NOT_FOUND;
 
 badSpec:
 
     LE_ERROR("Invalid JSON extraction spec '%s'.", extractionSpec);
-    return NULL;
+    return LE_BAD_PARAMETER;
 }
 
 
@@ -602,23 +632,31 @@ badSpec:
  *
  * The extraction specifiers look like "x" or "x.y" or "[3]" or "x[3].y", etc.
  *
- * @return Reference to the extracted data sample, or NULL if failed.
+ * @return
+ *  - LE_OK if successful
+ *  - LE_FORMAT_ERROR if there's something wrong with the input JSON string.
+ *  - LE_BAD_PARAMETER if there's something wrong with the extraction specification.
+ *  - LE_NOT_FOUND if the thing we are trying to extract doesn't exist in the JSON input.
+ *  - LE_OVERFLOW if the provided result buffer isn't big enough.
  */
 //--------------------------------------------------------------------------------------------------
-dataSample_Ref_t json_Extract
+le_result_t json_Extract
 (
-    dataSample_Ref_t sampleRef, ///< [IN] Original JSON data sample to extract from.
+    char* resultBuffPtr,    ///< [OUT] Ptr to where to put the extracted JSON.
+    size_t resultBuffSize,  ///< [IN] Size of the result buffer, in bytes, including space for null.
+    const char* jsonValue,   ///< [IN] Original JSON string to extract from.
     const char* extractionSpec, ///< [IN] the extraction specification.
-    io_DataType_t* dataTypePtr  ///< [OUT] Ptr to where to put the data type of the extracted object
+    json_DataType_t* dataTypePtr  ///< [OUT] Ptr to where to put the data type of extracted JSON
 )
 //--------------------------------------------------------------------------------------------------
 {
-    const char* original = dataSample_GetJson(sampleRef);
-    const char* valPtr = Find(original, extractionSpec);
+    const char* valPtr;
 
-    if (valPtr == NULL)
+    le_result_t result = Find(jsonValue, extractionSpec, &valPtr);
+
+    if (result != LE_OK)
     {
-        return NULL;
+        return result;
     }
 
     const char* endPtr = NULL;
@@ -630,13 +668,18 @@ dataSample_Ref_t json_Extract
             endPtr = SkipObject(valPtr);
             if (endPtr != NULL)
             {
-                *dataTypePtr = IO_DATA_TYPE_JSON;
-                char object[HUB_MAX_STRING_BYTES];
                 size_t objSize = (endPtr - valPtr);
-                LE_ASSERT(objSize < sizeof(object));
-                strncpy(object, valPtr, objSize);
-                object[objSize] = '\0';
-                return dataSample_CreateJson(dataSample_GetTimestamp(sampleRef), object);
+                if (objSize >= resultBuffSize)
+                {
+                    return LE_OVERFLOW;
+                }
+                strncpy(resultBuffPtr, valPtr, objSize);
+                resultBuffPtr[objSize] = '\0';
+                if (dataTypePtr)
+                {
+                    *dataTypePtr = JSON_TYPE_OBJECT;
+                }
+                return LE_OK;
             }
             break;
 
@@ -645,13 +688,18 @@ dataSample_Ref_t json_Extract
             endPtr = SkipArray(valPtr);
             if (endPtr != NULL)
             {
-                *dataTypePtr = IO_DATA_TYPE_JSON;
-                char object[HUB_MAX_STRING_BYTES];
                 size_t objSize = (endPtr - valPtr);
-                LE_ASSERT(objSize < sizeof(object));
-                strncpy(object, valPtr, objSize);
-                object[objSize] = '\0';
-                return dataSample_CreateJson(dataSample_GetTimestamp(sampleRef), object);
+                if (objSize >= resultBuffSize)
+                {
+                    return LE_OVERFLOW;
+                }
+                strncpy(resultBuffPtr, valPtr, objSize);
+                resultBuffPtr[objSize] = '\0';
+                if (dataTypePtr)
+                {
+                    *dataTypePtr = JSON_TYPE_ARRAY;
+                }
+                return LE_OK;
             }
             break;
 
@@ -660,18 +708,22 @@ dataSample_Ref_t json_Extract
             endPtr = SkipString(valPtr);
             if (endPtr != NULL)
             {
-                *dataTypePtr = IO_DATA_TYPE_STRING;
-
                 // Move inside the quotes.
                 valPtr++;
                 endPtr--;
 
-                char string[HUB_MAX_STRING_BYTES];
                 size_t stringLen = (endPtr - valPtr);
-                LE_ASSERT(stringLen < sizeof(string));
-                strncpy(string, valPtr, stringLen);
-                string[stringLen] = '\0';
-                return dataSample_CreateString(dataSample_GetTimestamp(sampleRef), string);
+                if (stringLen >= resultBuffSize)
+                {
+                    return LE_OVERFLOW;
+                }
+                strncpy(resultBuffPtr, valPtr, stringLen);
+                resultBuffPtr[stringLen] = '\0';
+                if (dataTypePtr)
+                {
+                    *dataTypePtr = JSON_TYPE_STRING;
+                }
+                return LE_OK;
             }
             break;
 
@@ -679,8 +731,8 @@ dataSample_Ref_t json_Extract
 
             if (strncmp(valPtr, "true", 4) == 0)
             {
-                *dataTypePtr = IO_DATA_TYPE_BOOLEAN;
-                return dataSample_CreateBoolean(dataSample_GetTimestamp(sampleRef), true);
+                *dataTypePtr = JSON_TYPE_BOOLEAN;
+                return le_utf8_Copy(resultBuffPtr, "true", resultBuffSize, NULL);
             }
             break;
 
@@ -688,8 +740,8 @@ dataSample_Ref_t json_Extract
 
             if (strncmp(valPtr, "false", 5) == 0)
             {
-                *dataTypePtr = IO_DATA_TYPE_BOOLEAN;
-                return dataSample_CreateBoolean(dataSample_GetTimestamp(sampleRef), false);
+                *dataTypePtr = JSON_TYPE_BOOLEAN;
+                return le_utf8_Copy(resultBuffPtr, "false", resultBuffSize, NULL);
             }
             break;
 
@@ -697,28 +749,38 @@ dataSample_Ref_t json_Extract
 
             if (strncmp(valPtr, "null", 4) == 0)
             {
-                *dataTypePtr = IO_DATA_TYPE_TRIGGER;
-                return dataSample_CreateTrigger(dataSample_GetTimestamp(sampleRef));
+                *dataTypePtr = JSON_TYPE_NULL;
+                return le_utf8_Copy(resultBuffPtr, "null", resultBuffSize, NULL);
             }
             break;
 
         default:
         {
-            double number;
-            if (ParseNumber(&number, valPtr, "}], \n\r\t") == LE_OK)
+            const char* endPtr = SkipNumber(valPtr);
+            if (endPtr != NULL)
             {
-                *dataTypePtr = IO_DATA_TYPE_NUMERIC;
-                return dataSample_CreateNumeric(dataSample_GetTimestamp(sampleRef), number);
+                size_t objSize = (endPtr - valPtr);
+                if (objSize >= resultBuffSize)
+                {
+                    return LE_OVERFLOW;
+                }
+                strncpy(resultBuffPtr, valPtr, objSize);
+                resultBuffPtr[objSize] = '\0';
+                if (dataTypePtr)
+                {
+                    *dataTypePtr = JSON_TYPE_NUMBER;
+                }
+                return LE_OK;
             }
             break;
         }
     }
 
-    LE_ERROR("Invalid content in JSON string '%s' beginning at position %zu.",
-             original,
-             valPtr - original);
+    LE_ERROR("Invalid content in JSON string '%s' beginning at byte %zu.",
+             jsonValue,
+             valPtr - jsonValue);
 
-    return NULL;
+    return LE_FORMAT_ERROR;
 }
 
 
@@ -765,7 +827,7 @@ bool json_ConvertToBoolean
  * @return The numeric value.
  */
 //--------------------------------------------------------------------------------------------------
-double json_ConvertToNumeric
+double json_ConvertToNumber
 (
     const char* jsonValue
 )
@@ -815,3 +877,38 @@ bool json_IsValid
 
     return true;
 }
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get a printable string containing the name of a given data type.
+ *
+ * @return Pointer to the null-terminated string.
+ */
+//--------------------------------------------------------------------------------------------------
+LE_SHARED const char* json_GetDataTypeName
+(
+    json_DataType_t dataType
+)
+//--------------------------------------------------------------------------------------------------
+{
+    switch (dataType)
+    {
+        case JSON_TYPE_NULL:    return "null";
+        case JSON_TYPE_BOOLEAN: return "Boolean";
+        case JSON_TYPE_NUMBER:  return "number";
+        case JSON_TYPE_STRING:  return "string";
+        case JSON_TYPE_OBJECT:  return "object";
+        case JSON_TYPE_ARRAY:   return "array";
+    }
+
+    LE_CRIT("Invalid data type code '%d'.", dataType);
+
+    return "unknown";
+}
+
+
+COMPONENT_INIT
+{
+}
+

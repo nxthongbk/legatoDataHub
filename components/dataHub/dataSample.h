@@ -236,6 +236,24 @@ const le_result_t dataSample_ConvertToJson
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Extract an object member or array element from a JSON data value, based on a given
+ * extraction specifier.
+ *
+ * The extraction specifiers look like "x" or "x.y" or "[3]" or "x[3].y", etc.
+ *
+ * @return Reference to the extracted data sample, or NULL if failed.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t dataSample_ExtractJson
+(
+    dataSample_Ref_t sampleRef, ///< [IN] Original JSON data sample to extract from.
+    const char* extractionSpec, ///< [IN] the extraction specification.
+    io_DataType_t* dataTypePtr  ///< [OUT] Ptr to where to put the data type of the extracted object
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Create a copy of a Data Sample.
  *
  * @return Pointer to the new copy.

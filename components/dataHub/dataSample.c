@@ -9,6 +9,7 @@
 #include "interfaces.h"
 #include "dataHub.h"
 #include "dataSample.h"
+#include "json.h"
 
 
 typedef double Timestamp_t;
@@ -429,6 +430,79 @@ const le_result_t dataSample_ConvertToJson
     }
 
     LE_FATAL("Invalid data type %d.", dataType);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Extract an object member or array element from a JSON data value, based on a given
+ * extraction specifier.
+ *
+ * The extraction specifiers look like "x" or "x.y" or "[3]" or "x[3].y", etc.
+ *
+ * @return Reference to the extracted data sample, or NULL if failed.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t dataSample_ExtractJson
+(
+    dataSample_Ref_t sampleRef, ///< [IN] Original JSON data sample to extract from.
+    const char* extractionSpec, ///< [IN] the extraction specification.
+    io_DataType_t* dataTypePtr  ///< [OUT] Ptr to where to put the data type of the extracted object
+)
+//--------------------------------------------------------------------------------------------------
+{
+    char resultBuff[IO_MAX_STRING_VALUE_LEN + 1];
+    json_DataType_t jsonType;
+
+    le_result_t result = json_Extract(resultBuff,
+                                      sizeof(resultBuff),
+                                      dataSample_GetJson(sampleRef),
+                                      extractionSpec,
+                                      &jsonType);
+    if (result != LE_OK)
+    {
+        LE_WARN("Failed to extract '%s' from JSON '%s'.",
+                extractionSpec,
+                dataSample_GetJson(sampleRef));
+        return NULL;
+    }
+    else
+    {
+        switch (jsonType)
+        {
+            case JSON_TYPE_NULL:
+
+                *dataTypePtr = IO_DATA_TYPE_TRIGGER;
+                return dataSample_CreateTrigger(dataSample_GetTimestamp(sampleRef));
+
+            case JSON_TYPE_BOOLEAN:
+
+                *dataTypePtr = IO_DATA_TYPE_BOOLEAN;
+                return dataSample_CreateBoolean(dataSample_GetTimestamp(sampleRef),
+                                                json_ConvertToBoolean(resultBuff));
+
+            case JSON_TYPE_NUMBER:
+
+                *dataTypePtr = IO_DATA_TYPE_NUMERIC;
+                return dataSample_CreateNumeric(dataSample_GetTimestamp(sampleRef),
+                                                json_ConvertToNumber(resultBuff));
+
+            case JSON_TYPE_STRING:
+
+                *dataTypePtr = IO_DATA_TYPE_STRING;
+                return dataSample_CreateString(dataSample_GetTimestamp(sampleRef),
+                                               resultBuff);
+
+            case JSON_TYPE_OBJECT:
+            case JSON_TYPE_ARRAY:
+
+                *dataTypePtr = IO_DATA_TYPE_JSON;
+                return dataSample_CreateJson(dataSample_GetTimestamp(sampleRef),
+                                             resultBuff);
+        }
+
+        LE_FATAL("Unexpected JSON type %d.", jsonType);
+    }
 }
 
 

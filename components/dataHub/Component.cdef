@@ -21,6 +21,11 @@ requires:
         le_limit.api [types-only]
         le_appInfo.api
     }
+
+    component:
+    {
+        $CURDIR/../json
+    }
 }
 
 sources:
@@ -35,5 +40,9 @@ sources:
     ioPoint.c
     obs.c
     handler.c
-    json.c
+}
+
+cflags:
+{
+    -I$CURDIR/../json
 }
