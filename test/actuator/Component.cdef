@@ -3,6 +3,7 @@ requires:
     api:
     {
         io.api
+        admin.api
     }
 }
 
