@@ -23,6 +23,10 @@ typedef struct psensor
     le_timer_Ref_t timer;
     void (*sampleFunc)(psensor_Ref_t);
     char name[PSENSOR_MAX_NAME_BYTES];
+
+    dhubIO_TriggerPushHandlerRef_t triggerHandlerRef;
+    dhubIO_NumericPushHandlerRef_t periodHandlerRef;
+    dhubIO_BooleanPushHandlerRef_t enableHandlerRef;
 }
 Sensor_t;
 
@@ -211,8 +215,8 @@ psensor_Ref_t psensor_Create
     {
         LE_FATAL("Failed to create Data Hub Output '%s' (%s).", path, LE_RESULT_TXT(result));
     }
-    dhubIO_AddBooleanPushHandler(path, HandleEnablePush, sensorPtr);
-    dhubIO_SetBooleanDefault(path, true);
+    sensorPtr->enableHandlerRef = dhubIO_AddBooleanPushHandler(path, HandleEnablePush, sensorPtr);
+    dhubIO_PushBoolean(path, DHUBIO_NOW, true);
 
     LE_ASSERT(snprintf(path, sizeof(path), "%s/period", name) < sizeof(path));
     result = dhubIO_CreateOutput(path, DHUBIO_DATA_TYPE_NUMERIC, "s");
@@ -220,7 +224,7 @@ psensor_Ref_t psensor_Create
     {
         LE_FATAL("Failed to create Data Hub Output '%s' (%s).", path, LE_RESULT_TXT(result));
     }
-    dhubIO_AddNumericPushHandler(path, HandlePeriodPush, sensorPtr);
+    sensorPtr->periodHandlerRef = dhubIO_AddNumericPushHandler(path, HandlePeriodPush, sensorPtr);
 
     LE_ASSERT(snprintf(path, sizeof(path), "%s/trigger", name) < sizeof(path));
     result = dhubIO_CreateOutput(path, DHUBIO_DATA_TYPE_TRIGGER, "");
@@ -228,10 +232,64 @@ psensor_Ref_t psensor_Create
     {
         LE_FATAL("Failed to create Data Hub Output '%s' (%s).", path, LE_RESULT_TXT(result));
     }
-    dhubIO_AddTriggerPushHandler(path, HandleTriggerPush, sensorPtr);
+    sensorPtr->triggerHandlerRef = dhubIO_AddTriggerPushHandler(path, HandleTriggerPush, sensorPtr);
     dhubIO_MarkOptional(path);
 
     return sensorPtr;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Removes a periodic sensor scaffold and all associated resources
+ */
+//--------------------------------------------------------------------------------------------------
+void psensor_Destroy
+(
+    psensor_Ref_t *ref
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Sensor_t* sensorPtr;
+    char path[DHUBIO_MAX_RESOURCE_PATH_LEN];
+
+
+    LE_ASSERT(NULL != ref);
+
+    sensorPtr = *ref;
+    *ref = NULL;
+
+    if (sensorPtr)
+    {
+        sensorPtr->isEnabled = false;
+
+        // Stop and delete timer
+        (void)le_timer_Stop (sensorPtr->timer);
+        le_timer_Delete(sensorPtr->timer);
+
+        // Deregister handlers and remove resources
+        LE_ASSERT(snprintf(path, sizeof(path), "%s/trigger", sensorPtr->name) < sizeof(path));
+        dhubIO_RemoveTriggerPushHandler(sensorPtr->triggerHandlerRef);
+        dhubIO_DeleteResource(path);
+
+
+        LE_ASSERT(snprintf(path, sizeof(path), "%s/period", sensorPtr->name) < sizeof(path));
+        dhubIO_RemoveNumericPushHandler(sensorPtr->periodHandlerRef);
+        dhubIO_DeleteResource(path);
+
+
+        LE_ASSERT(snprintf(path, sizeof(path), "%s/enable", sensorPtr->name) < sizeof(path));
+        dhubIO_RemoveBooleanPushHandler(sensorPtr->enableHandlerRef);
+        dhubIO_DeleteResource(path);
+
+
+        LE_ASSERT(snprintf(path, sizeof(path), "%s/value", sensorPtr->name) < sizeof(path));
+        dhubIO_DeleteResource(path);
+
+        dhubIO_DeleteResource(sensorPtr->name);
+
+        free(sensorPtr);
+    }
 }
 
 
