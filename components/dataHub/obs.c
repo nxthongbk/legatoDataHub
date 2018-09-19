@@ -1505,7 +1505,7 @@ bool obs_ShouldAccept
             && (!isnan(obsPtr->lowLimit))
             && (obsPtr->lowLimit > obsPtr->highLimit)  )
         {
-            if ((numericValue > obsPtr->lowLimit) || (numericValue < obsPtr->highLimit))
+            if ((numericValue < obsPtr->lowLimit) && (numericValue > obsPtr->highLimit))
             {
                 return false;
             }
