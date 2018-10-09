@@ -216,7 +216,6 @@ psensor_Ref_t psensor_Create
         LE_FATAL("Failed to create Data Hub Output '%s' (%s).", path, LE_RESULT_TXT(result));
     }
     sensorPtr->enableHandlerRef = dhubIO_AddBooleanPushHandler(path, HandleEnablePush, sensorPtr);
-    dhubIO_PushBoolean(path, DHUBIO_NOW, true);
 
     LE_ASSERT(snprintf(path, sizeof(path), "%s/period", name) < sizeof(path));
     result = dhubIO_CreateOutput(path, DHUBIO_DATA_TYPE_NUMERIC, "s");
