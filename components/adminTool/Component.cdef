@@ -29,4 +29,5 @@ requires:
 cflags:
 {
     -I$CURDIR/../json
+    -std=c99
 }
