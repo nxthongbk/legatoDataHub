@@ -175,7 +175,7 @@
  * By default, an Observation performs no filtering, accepting all samples it receives from its
  * data source without modification.
  *
- * The Following functions are used to configure an Observation's filtering criteria:
+ * The Following functions are used to configure an Observation's input filtering criteria:
  *  - admin_SetMinPeriod() - throttles the sample rate
  *  - admin_SetLowLimit() - causes numeric or Boolean samples below a given value to be dropped
  *  - admin_SetHighLimit() - causes numeric or Boolean samples above a given value to be dropped
@@ -239,6 +239,35 @@
  * //    accepted      dropped      accepted
  *
  * admin_SetChangeBy(obsPath, 0.5);
+ * @endcode
+ *
+ *
+ * @subsubsection c_dataHubAdmin_ObsTransforms Transforms
+ *
+ * Data transforms can be applied to an Observation buffer.  Transforms are operations such as
+ * mean, standard deviation, etc.  Data in the buffer is operated on by the transform and the
+ * output of this transform is written to the observation value
+ *
+ * A single function is used to set the transform on an Observation:
+ *  - admin_SetTransform(path, type, optionalParameters, parameterCount)
+ *
+ * The type of transform is determined by the argument to the function:
+ *  - OBS_TRANSFORM_TYPE_NONE   - No transform
+ *  - OBS_TRANSFORM_TYPE_MEAN   - Mean
+ *  - OBS_TRANSFORM_TYPE_STDDEV - Standard Deviation
+ *  - OBS_TRANSFORM_TYPE_MAX    - Maximum value in buffer
+ *  - OBS_TRANSFORM_TYPE_MIN    - Minimum value in buffer
+ *
+ * The optional parameters are dependent upon the transform being applied - e.g. Tap coefficients 
+ * for Z-transforms, such as IIR or FIR filtering.  Currently unused
+ *
+ * The Following function can be used to retrieve the transform type:
+ *  - admin_GetTransform(path)
+ *
+ * For example, to configure an Observation to report the mean of the values in its buffer:
+ *
+ * @code
+ * admin_SetTransform(obsPath, OBS_TRANSFORM_TYPE_MEAN, NULL, 0);
  * @endcode
  *
  *
@@ -412,6 +441,7 @@
  *  - admin_GetLowLimit()
  *  - admin_GetHighLimit()
  *  - admin_GetChangeBy()
+ *  - admin_GetTransform()
  *  - admin_GetBufferMaxCount()
  *  - admin_GetBufferBackupPeriod()
  *
@@ -498,6 +528,29 @@ ENUM ResourceOperationType
 {
     RESOURCE_ADDED,     //< Added
     RESOURCE_REMOVED    //< Removed
+};
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Maximum number of optional transform parameters for an observation buffer.
+ */
+//--------------------------------------------------------------------------------------------------
+DEFINE MAX_TRANSFORM_PARAMETERS = 8;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Enumerates the different types of transforms which can be applied to an observation buffer
+ */
+//--------------------------------------------------------------------------------------------------
+ENUM TransformType
+{
+    OBS_TRANSFORM_TYPE_NONE,      ///< No transformation
+    OBS_TRANSFORM_TYPE_MEAN,      ///< Mean
+    OBS_TRANSFORM_TYPE_STDDEV,    ///< Standard Deviation
+    OBS_TRANSFORM_TYPE_MAX,       ///< Maximum value in buffer
+    OBS_TRANSFORM_TYPE_MIN,       ///< Minimum value in buffer
 };
 
 
@@ -903,6 +956,35 @@ FUNCTION SetChangeBy
 FUNCTION double GetChangeBy
 (
     string path[io.MAX_RESOURCE_PATH_LEN] IN  ///< Path within the /obs/ namespace.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform a transform on an observation's buffered data. Value of the observation will be  
+ * the output of the transform 
+ * 
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false. 
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION SetTransform
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN,   ///< Path within the /obs/ namespace.
+    TransformType transformType IN,             ///< Type of transform to apply
+    double params[MAX_TRANSFORM_PARAMETERS] IN  ///< Optional parameter list
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the type of transform currently applied to an Observation.
+ *
+ * @return The TransformType
+ */
+//--------------------------------------------------------------------------------------------------
+FUNCTION TransformType GetTransform
+(
+    string path[io.MAX_RESOURCE_PATH_LEN] IN   ///< Path within the /obs/ namespace.
 );
 
 

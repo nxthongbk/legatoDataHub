@@ -45,6 +45,7 @@ static enum
     OBJECT_LOW_LIMIT,
     OBJECT_HIGH_LIMIT,
     OBJECT_CHANGE_BY,
+    OBJECT_TRANSFORM,
     OBJECT_BUFFER_SIZE,
     OBJECT_BACKUP_PERIOD,
     OBJECT_JSON_EXTRACTION,
@@ -142,6 +143,18 @@ static void HandleHelpRequest
         "            an Observation resource at PATH if one does not already exist\n"
         "            there.\n"
         "\n"
+        "    dhub set transform PATH TYPE\n"
+        "            Sets the numeric transform for an Observation buffer.\n"
+        "            PATH is expected to be under /obs/.  Setting this will create\n"
+        "            an Observation resource at PATH if one does not already exist\n"
+        "            there.\n"
+        "            Available transform types:\n"
+        "            0 : none\n"
+        "            1 : mean\n"
+        "            2 : standard deviation\n"
+        "            3 : maximum\n"
+        "            4 : minimum\n"
+        "\n"
         "    dhub set bufferSize PATH VALUE\n"
         "            Sets the maximum number of samples that an Observation will buffer.\n"
         "            PATH is expected to be under /obs/.  Setting this will create\n"
@@ -202,6 +215,7 @@ static void HandleHelpRequest
         "              lowLimit\n"
         "              highLimit\n"
         "              changeBy\n"
+        "              transform\n"
         "              jsonExtraction\n"
         "              min\n"
         "              max\n"
@@ -678,6 +692,31 @@ static void PrintDoubleSetting
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Print out a numeric setting that is of type int.
+ */
+//--------------------------------------------------------------------------------------------------
+static void PrintTransformSetting
+(
+    const char* label,
+    int value
+)
+//--------------------------------------------------------------------------------------------------
+{
+    const char *transformNameStr[] = 
+    {
+        "none (0)",
+        "mean (1)",
+        "standard deviation (2)",
+        "maximum (3)",
+        "minimum (4)",
+    };
+
+    printf("%s: %s\n", label, transformNameStr[value]);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Print the data type of a resource at a given path.
  */
 //--------------------------------------------------------------------------------------------------
@@ -870,6 +909,8 @@ static void PrintEntry
         PrintDoubleSetting("highLimit", admin_GetHighLimit(path));
         Indent(depth);
         PrintDoubleSetting("changeBy", admin_GetChangeBy(path));
+        Indent(depth);
+        PrintTransformSetting("transform", admin_GetTransform(path));
         Indent(depth);
         printf("bufferSize: %u entries\n", admin_GetBufferMaxCount(path));
         Indent(depth);
@@ -1179,6 +1220,37 @@ static void SetIntegerSetting
     }
 
     setterFunc(path, (uint32_t)value);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set a transform setting.
+ *
+ * @note Has the side-effect of creating the Observation if it does not yet exist.
+ */
+//--------------------------------------------------------------------------------------------------
+static void SetTransformSetting
+(
+    const char* path,
+    const char* valueStr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    int value;
+    if ((le_utf8_ParseInt(&value, valueStr) != LE_OK) || (value < 0))
+    {
+        fprintf(stderr, "Non-negative integer value required.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (admin_CreateObs(path) != LE_OK)
+    {
+        fprintf(stderr, "Invalid resource path for Observation.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    admin_SetTransform(path, (admin_TransformType_t)value, NULL, 0);
 }
 
 
@@ -1535,6 +1607,7 @@ static void PathArgHandler
         case OBJECT_LOW_LIMIT:
         case OBJECT_HIGH_LIMIT:
         case OBJECT_CHANGE_BY:
+        case OBJECT_TRANSFORM:
         case OBJECT_BUFFER_SIZE:
         case OBJECT_BACKUP_PERIOD:
         case OBJECT_JSON_EXTRACTION:
@@ -1619,6 +1692,10 @@ static void ObjectTypeArgHandler
     else if (strcmp(arg, "changeBy") == 0)
     {
         Object = OBJECT_CHANGE_BY;
+    }
+    else if (strcmp(arg, "transform") == 0)
+    {
+        Object = OBJECT_TRANSFORM;
     }
     else if (strcmp(arg, "bufferSize") == 0)
     {
@@ -1874,6 +1951,11 @@ COMPONENT_INIT
                     GetDoubleSetting(admin_GetChangeBy);
                     break;
 
+                case OBJECT_TRANSFORM:
+
+                    GetIntegerSetting(admin_GetTransform);
+                    break;
+
                 case OBJECT_BUFFER_SIZE:
 
                     GetIntegerSetting(admin_GetBufferMaxCount);
@@ -1968,6 +2050,11 @@ COMPONENT_INIT
                     SetDoubleSetting(PathArg, ValueArg, admin_SetChangeBy);
                     break;
 
+                case OBJECT_TRANSFORM:
+
+                    SetTransformSetting(PathArg, ValueArg);
+                    break;
+
                 case OBJECT_BUFFER_SIZE:
 
                     SetIntegerSetting(PathArg, ValueArg, admin_SetBufferMaxCount);
@@ -2044,6 +2131,11 @@ COMPONENT_INIT
                 case OBJECT_CHANGE_BY:
 
                     admin_SetChangeBy(PathArg, NAN);
+                    break;
+
+                case OBJECT_TRANSFORM:
+
+                    admin_SetTransform(PathArg, ADMIN_OBS_TRANSFORM_TYPE_NONE, NULL, 0);
                     break;
 
                 case OBJECT_BUFFER_SIZE:

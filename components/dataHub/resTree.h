@@ -545,6 +545,36 @@ double resTree_GetChangeBy
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Perform a transform on buffered data. Value of the observation will be the output of the 
+ * transform 
+ * 
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false. 
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_SetTransform
+(
+    resTree_EntryRef_t obsEntry,
+    admin_TransformType_t transformType,
+    const double* paramsPtr,
+    size_t paramsSize
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the type of transform currently applied to an Observation.
+ *
+ * @return The TransformType
+ */
+//--------------------------------------------------------------------------------------------------
+admin_TransformType_t resTree_GetTransform
+(
+    resTree_EntryRef_t obsEntry
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set the maximum number of data samples to buffer in a given Observation.  Buffers are FIFO
  * circular buffers. When full, the buffer drops the oldest value to make room for a new addition.
  */

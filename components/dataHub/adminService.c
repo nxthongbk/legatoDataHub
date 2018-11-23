@@ -915,6 +915,68 @@ double admin_GetChangeBy
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Perform a transform on buffered data. Value of the observation will be the output of the 
+ * transform 
+ * 
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false. 
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetTransform
+(
+    const char* path,
+        ///< [IN] Path within the /obs/ namespace.
+    admin_TransformType_t transformType,
+        ///< [IN] Type of transform to apply
+    const double* paramsPtr,
+        ///< [IN] Optional parameter list
+    size_t paramsSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+    }
+    else
+    {
+        resTree_SetTransform(obsEntry, transformType, paramsPtr, paramsSize);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the type of transform currently applied to an Observation.
+ *
+ * @return The TransformType
+ */
+//--------------------------------------------------------------------------------------------------
+admin_TransformType_t admin_GetTransform
+(
+    const char* path
+        ///< Path within the /obs/ namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+        return ADMIN_OBS_TRANSFORM_TYPE_NONE;
+    }
+    else
+    {
+        return resTree_GetTransform(obsEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set the JSON member/element specifier for extraction of data from within a structured JSON
  * value received by a given Observation.
  *

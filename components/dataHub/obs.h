@@ -14,6 +14,22 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Enumeration of all the supported transform types for observations.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef enum
+{
+    OBS_TRANSFORM_TYPE_NONE = 0,
+    OBS_TRANSFORM_TYPE_MEAN,
+    OBS_TRANSFORM_TYPE_STDDEV,
+    OBS_TRANSFORM_TYPE_MAX,
+    OBS_TRANSFORM_TYPE_MIN,
+}
+obs_TransformType_t;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialize the Observation module.
  *
  * @warning This must be called before any other function in this module is called.
@@ -89,6 +105,21 @@ bool obs_ShouldAccept
  */
 //--------------------------------------------------------------------------------------------------
 void obs_ProcessAccepted
+(
+    res_Resource_t* resPtr,
+    io_DataType_t dataType,     ///< Data type of the data sample.
+    dataSample_Ref_t sampleRef  ///< Data sample.
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform any post-filtering on a given Observation.
+ *
+ * @return The processed data sample
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t obs_ApplyTransform
 (
     res_Resource_t* resPtr,
     io_DataType_t dataType,     ///< Data type of the data sample.
@@ -203,6 +234,36 @@ void obs_SetChangeBy
  */
 //--------------------------------------------------------------------------------------------------
 double obs_GetChangeBy
+(
+    res_Resource_t* resPtr
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform a transform on buffered data. Value of the observation will be the output of the 
+ * transform 
+ * 
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false. 
+ */
+//--------------------------------------------------------------------------------------------------
+void obs_SetTransform
+(
+    res_Resource_t* resPtr,
+    obs_TransformType_t transformType,
+    const double* paramsPtr,
+    size_t paramsSize
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the type of transform currently applied to an Observation.
+ *
+ * @return The TransformType
+ */
+//--------------------------------------------------------------------------------------------------
+obs_TransformType_t obs_GetTransform
 (
     res_Resource_t* resPtr
 );

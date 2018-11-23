@@ -279,7 +279,6 @@ void res_Destruct
         resPtr->currentValue = NULL;
     }
 
-    resPtr->pushedValue = NULL;
     if (resPtr->pushedValue != NULL)
     {
         LE_WARN("Resource had a pushed value.");
@@ -290,13 +289,12 @@ void res_Destruct
     LE_ASSERT(resPtr->srcPtr == NULL);
     LE_ASSERT(le_dls_IsEmpty(&resPtr->destList));
 
-    if (resPtr->pushedValue != NULL)
+    if (resPtr->overrideValue != NULL)
     {
         LE_WARN("Resource had an override value.");
         le_mem_Release(resPtr->overrideValue);
         resPtr->overrideValue = NULL;
     }
-    resPtr->overrideValue = NULL;
 
     if (resPtr->defaultValue != NULL)
     {
@@ -543,12 +541,6 @@ static void UpdateCurrentValue
         linkPtr = le_dls_PeekNext(&(resPtr->destList), linkPtr);
     }
 
-    // If an Observation, do additional processing, if applicable.
-    if (entryType == ADMIN_ENTRY_TYPE_OBSERVATION)
-    {
-        obs_ProcessAccepted(resPtr, dataType, dataSample);
-    }
-
     // Call any the push handlers that match the data type of the sample.
     handler_CallAll(&resPtr->pushHandlerList, dataType, dataSample);
 }
@@ -575,6 +567,28 @@ void res_Push
     if ((units != NULL) && (*units == '\0'))
     {
         units = NULL;
+    }
+
+    if (ADMIN_ENTRY_TYPE_OBSERVATION == resTree_GetEntryType(resPtr->entryRef))
+    {
+        // Do JSON extraction (if applicable) before filtering.
+        if (obs_DoJsonExtraction(resPtr, &dataType, &dataSample) != LE_OK)
+        {
+            le_mem_Release(dataSample);
+            return;
+        }
+
+        // Buffer and possibly backup the sample            
+        obs_ProcessAccepted(resPtr, dataType, dataSample);
+
+        // Perform any transforms on the buffered data
+        dataSample = obs_ApplyTransform(resPtr, dataType, dataSample);
+
+        if (true != obs_ShouldAccept(resPtr, dataType, dataSample))
+        {
+            le_mem_Release(dataSample);
+            return;
+        }
     }
 
     // Record this as the latest pushed value, even if it doesn't get accepted as the new
@@ -635,14 +649,6 @@ void res_Push
             break;
 
         case ADMIN_ENTRY_TYPE_OBSERVATION:
-
-            // Do JSON extraction (if applicable) before filtering.
-            if (   (obs_DoJsonExtraction(resPtr, &dataType, &dataSample) != LE_OK)
-                || (!obs_ShouldAccept(resPtr, dataType, dataSample))  )
-            {
-                le_mem_Release(dataSample);
-                return;
-            }
 
             // *** FALL THROUGH ***
 
@@ -1027,6 +1033,49 @@ double res_GetChangeBy
 //--------------------------------------------------------------------------------------------------
 {
     return obs_GetChangeBy(resPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform a transform on buffered data. Value of the observation will be the output of the 
+ * transform 
+ * 
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false. 
+ */
+//--------------------------------------------------------------------------------------------------
+void res_SetTransform
+(
+    res_Resource_t* resPtr,
+    admin_TransformType_t transformType,
+    const double* paramsPtr,
+    size_t paramsSize
+)
+//--------------------------------------------------------------------------------------------------
+{
+    obs_SetTransform(resPtr, (obs_TransformType_t)transformType, paramsPtr, paramsSize);
+
+    if (IsUpdateInProgress)
+    {
+        resPtr->isConfigChanging = true;
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the type of transform currently applied to an Observation.
+ *
+ * @return The TransformType
+ */
+//--------------------------------------------------------------------------------------------------
+admin_TransformType_t res_GetTransform
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return obs_GetTransform(resPtr);
 }
 
 

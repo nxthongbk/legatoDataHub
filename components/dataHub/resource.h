@@ -31,7 +31,7 @@ typedef struct res_Resource
     io_DataType_t currentType;  ///< Data type of the current value of this resource.
     dataSample_Ref_t currentValue; ///< The current value of this resource; NULL if none yet.
     io_DataType_t pushedType;  ///< Data type of last value pushed to this resource.
-    dataSample_Ref_t pushedValue; ///< Last value pushed to resource (& accepted); NULL if none yet.
+    dataSample_Ref_t pushedValue; ///< Last value pushed to resource; NULL if none yet.
     struct res_Resource* srcPtr; ///< Ptr to resource that data samples will normally come from.
     le_dls_List_t destList; ///< List of routes to which data samples should be pushed.
     le_dls_Link_t destListLink; ///< Used to link into another resource's destList.
@@ -439,6 +439,36 @@ void res_SetChangeBy
  */
 //--------------------------------------------------------------------------------------------------
 double res_GetChangeBy
+(
+    res_Resource_t* resPtr
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform a transform on buffered data. Value of the observation will be the output of the 
+ * transform 
+ * 
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false. 
+ */
+//--------------------------------------------------------------------------------------------------
+void res_SetTransform
+(
+    res_Resource_t* resPtr,
+    admin_TransformType_t transformType,
+    const double* paramsPtr,
+    size_t paramsSize
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the type of transform currently applied to an Observation.
+ *
+ * @return The TransformType
+ */
+//--------------------------------------------------------------------------------------------------
+admin_TransformType_t res_GetTransform
 (
     res_Resource_t* resPtr
 );
