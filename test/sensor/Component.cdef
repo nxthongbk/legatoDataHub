@@ -11,6 +11,11 @@ sources:
     sensor.c
 }
 
+cflags:
+{
+    -I${CURDIR}/../../components/periodicSensor/
+}
+
 requires:
 {
     component:

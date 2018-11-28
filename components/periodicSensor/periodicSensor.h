@@ -42,7 +42,9 @@ LE_SHARED psensor_Ref_t psensor_Create
     const char* name,   ///< Name of the periodic sensor.
     dhubIO_DataType_t dataType,
     const char* units,
-    void (*sampleFunc)(psensor_Ref_t ref) ///< Sample function to be called back periodically.
+    void (*sampleFunc)(psensor_Ref_t ref,
+                       void *context), ///< Sample function to be called back periodically.
+    void *sampleFuncContext  ///< Context pointer to be passed to the sample function
 );
 
 
