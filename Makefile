@@ -5,22 +5,22 @@ TARGET ?= localhost
 all: dataHub appInfoStub sensor actuator
 
 dataHub:
-	mkapp -t localhost dataHub.adef -i $(LEGATO_ROOT)/interfaces/supervisor
+	mkapp -t $(TARGET) dataHub.adef -i $(LEGATO_ROOT)/interfaces/supervisor
 
 appInfoStub:
-	mkapp -t localhost test/appInfoStub.adef -i $(LEGATO_ROOT)/interfaces/supervisor -i $(CURDIR)
+	mkapp -t $(TARGET) test/appInfoStub.adef -i $(LEGATO_ROOT)/interfaces/supervisor -i $(CURDIR)
 
 sensor:
-	mkapp -t localhost test/sensor.adef -i $(PWD) -s components -i components/periodicSensor
+	mkapp -t $(TARGET) test/sensor.adef -i $(PWD) -s components -i components/periodicSensor
 
 actuator:
-	mkapp -t localhost test/actuator.adef -i $(PWD)
+	mkapp -t $(TARGET) test/actuator.adef -i $(PWD)
 
 .PHONY: clean
 clean:
 	rm -rf _build* *.update docs backup
 
-DHUB = _build_dataHub/localhost/app/dataHub/staging/read-only/bin/dhub
+DHUB = _build_dataHub/$(TARGET)/app/dataHub/staging/read-only/bin/dhub
 
 .PHONY: start stop
 start: stop all
