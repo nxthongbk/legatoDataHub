@@ -479,6 +479,8 @@ static ssize_t WriteToFd
 {
     ssize_t result;
 
+    LE_ASSERT(buffPtr != NULL);
+
     do
     {
         result = write(fd, buffPtr, byteCount);
@@ -503,8 +505,8 @@ static void ContinueReadOp
     ssize_t result;
     for (;;)
     {
-        const char* writeBuffPtr;
-        size_t writeLen;
+        const char* writeBuffPtr = NULL;
+        size_t writeLen = 0;
 
         // Figure out what to write based on the state.
         switch (opPtr->state)
