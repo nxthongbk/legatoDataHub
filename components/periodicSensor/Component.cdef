@@ -12,6 +12,14 @@ cflags:
     -std=c99
 }
 
+provides:
+{
+    headerDir:
+    {
+        ${CURDIR}
+    }
+}
+
 requires:
 {
     api:
