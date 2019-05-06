@@ -997,6 +997,7 @@ le_result_t io_GetBoolean
     }
 
     *valuePtr = dataSample_GetBoolean(currentValue);
+    *timestampPtr = dataSample_GetTimestamp(currentValue);
 
     return LE_OK;
 }
@@ -1036,6 +1037,7 @@ le_result_t io_GetNumeric
     }
 
     *valuePtr = dataSample_GetNumeric(currentValue);
+    *timestampPtr = dataSample_GetTimestamp(currentValue);
 
     return LE_OK;
 }
@@ -1077,6 +1079,7 @@ le_result_t io_GetString
         return LE_UNAVAILABLE;
     }
 
+    *timestampPtr = dataSample_GetTimestamp(currentValue);
     return le_utf8_Copy(value, dataSample_GetString(currentValue), valueSize, NULL);
 }
 
@@ -1117,6 +1120,7 @@ le_result_t io_GetJson
         return LE_UNAVAILABLE;
     }
 
+    *timestampPtr = dataSample_GetTimestamp(currentValue);
     return dataSample_ConvertToJson(currentValue, resTree_GetDataType(resRef), value, valueSize);
 }
 
