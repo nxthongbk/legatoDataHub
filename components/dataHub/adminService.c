@@ -12,6 +12,29 @@
 #include "handler.h"
 #include "json.h"
 
+typedef struct
+{
+    le_dls_Link_t link; ///< Used to link into the ResourceTreeChangeHandlerList
+    admin_ResourceTreeChangeHandlerFunc_t callback;
+    void* contextPtr;
+}
+ResourceTreeChangeHandler_t;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * List of Resource Tree Change Handlers.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_dls_List_t ResourceTreeChangeHandlerList = LE_DLS_LIST_INIT;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Pool of ResourceTreeChangeHandler objects.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_mem_PoolRef_t ResourceTreeChangeHandlerPool = NULL;
+
 //--------------------------------------------------------------------------------------------------
 /**
  * @return A reference to the '/obs' namespace.  Creates it if necessary.
@@ -886,6 +909,68 @@ double admin_GetChangeBy
     else
     {
         return resTree_GetChangeBy(resEntry);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform a transform on buffered data. Value of the observation will be the output of the
+ * transform
+ *
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_SetTransform
+(
+    const char* path,
+        ///< [IN] Path within the /obs/ namespace.
+    admin_TransformType_t transformType,
+        ///< [IN] Type of transform to apply
+    const double* paramsPtr,
+        ///< [IN] Optional parameter list
+    size_t paramsSize
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+    }
+    else
+    {
+        resTree_SetTransform(obsEntry, transformType, paramsPtr, paramsSize);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the type of transform currently applied to an Observation.
+ *
+ * @return The TransformType
+ */
+//--------------------------------------------------------------------------------------------------
+admin_TransformType_t admin_GetTransform
+(
+    const char* path
+        ///< Path within the /obs/ namespace.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    resTree_EntryRef_t obsEntry = GetObservation(path);
+
+    if (obsEntry == NULL)
+    {
+        LE_ERROR("Malformed observation path '%s'.", path);
+        return ADMIN_OBS_TRANSFORM_TYPE_NONE;
+    }
+    else
+    {
+        return resTree_GetTransform(obsEntry);
     }
 }
 
@@ -2008,7 +2093,90 @@ le_result_t admin_GetDataType
 
     return LE_OK;
 }
+//--------------------------------------------------------------------------------------------------
+/**
+ * Add handler function for EVENT 'admin_ResourceTreeChange'
+ */
+//--------------------------------------------------------------------------------------------------
+admin_ResourceTreeChangeHandlerRef_t admin_AddResourceTreeChangeHandler
+(
+    admin_ResourceTreeChangeHandlerFunc_t callbackPtr,
+        ///< [IN]
+    void* contextPtr
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    ResourceTreeChangeHandler_t* handlerPtr = le_mem_ForceAlloc(ResourceTreeChangeHandlerPool);
 
+    handlerPtr->link = LE_DLS_LINK_INIT;
+
+    handlerPtr->callback = callbackPtr;
+    handlerPtr->contextPtr = contextPtr;
+
+    le_dls_Queue(&ResourceTreeChangeHandlerList, &handlerPtr->link);
+
+    return (admin_ResourceTreeChangeHandlerRef_t)handlerPtr;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove handler function for EVENT 'admin_ResourceTreeChange'
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_RemoveResourceTreeChangeHandler
+(
+    admin_ResourceTreeChangeHandlerRef_t handlerRef
+        ///< [IN]
+)
+//--------------------------------------------------------------------------------------------------
+{
+    ResourceTreeChangeHandler_t* handlerPtr = (ResourceTreeChangeHandler_t*)handlerRef;
+
+    le_dls_Remove(&ResourceTreeChangeHandlerList, &handlerPtr->link);
+
+    le_mem_Release(handlerPtr);
+}
+//--------------------------------------------------------------------------------------------------
+/**
+ * Call all the registered Resource Tree Change Handlers.
+ */
+//--------------------------------------------------------------------------------------------------
+void admin_CallResourceTreeChangeHandlers
+(
+    const char* path,
+    admin_EntryType_t entryType,
+    admin_ResourceOperationType_t resourceOperationType
+)
+//--------------------------------------------------------------------------------------------------
+{
+    le_dls_Link_t* linkPtr = le_dls_Peek(&ResourceTreeChangeHandlerList);
+
+    while (linkPtr != NULL)
+    {
+        ResourceTreeChangeHandler_t* handlerPtr = CONTAINER_OF(linkPtr, ResourceTreeChangeHandler_t, link);
+
+        handlerPtr->callback(path, entryType, resourceOperationType, handlerPtr->contextPtr);
+
+        linkPtr = le_dls_PeekNext(&ResourceTreeChangeHandlerList, linkPtr);
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initializes the module.  Must be called before any other functions in the module are called.
+ */
+//--------------------------------------------------------------------------------------------------
+void adminService_Init
+(
+    void
+)
+//--------------------------------------------------------------------------------------------------
+{
+    ResourceTreeChangeHandlerPool = le_mem_CreatePool("ResourceTreeChangeHandlers",
+                                                  sizeof(ResourceTreeChangeHandler_t));
+}
 
 //--------------------------------------------------------------------------------------------------
 /**

@@ -22,7 +22,8 @@ static le_timer_Ref_t Timer;
 //--------------------------------------------------------------------------------------------------
 static void SampleTemp
 (
-    psensor_Ref_t sensorRef
+    psensor_Ref_t sensorRef,
+    void *context
 )
 //--------------------------------------------------------------------------------------------------
 {
@@ -200,5 +201,6 @@ COMPONENT_INIT
     le_timer_SetRepeat(Timer, 0);
     le_timer_SetHandler(Timer, TimerExpired);
 
-    LE_ASSERT(psensor_Create("temperature", IO_DATA_TYPE_NUMERIC, "degC", SampleTemp) != NULL);
+    LE_ASSERT(
+        psensor_Create("temperature", IO_DATA_TYPE_NUMERIC, "degC", SampleTemp, NULL) != NULL);
 }

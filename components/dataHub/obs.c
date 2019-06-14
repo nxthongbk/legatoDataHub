@@ -71,6 +71,8 @@ typedef struct
     double minPeriod; ///< Min number of seconds before accepting another value; NAN/0 = disabled.
     uint32_t lastPushTime; ///< Time at which last push was accepted (ms, relative clock).
 
+    obs_TransformType_t transformType; ///< Buffer transform type
+
     size_t maxCount;  ///< Maximum number of entries to buffer.
     size_t count;     ///< Current number of entries in the buffer.
 
@@ -477,6 +479,8 @@ static ssize_t WriteToFd
 {
     ssize_t result;
 
+    LE_ASSERT(buffPtr != NULL);
+
     do
     {
         result = write(fd, buffPtr, byteCount);
@@ -501,8 +505,8 @@ static void ContinueReadOp
     ssize_t result;
     for (;;)
     {
-        const char* writeBuffPtr;
-        size_t writeLen;
+        const char* writeBuffPtr = NULL;
+        size_t writeLen = 0;
 
         // Figure out what to write based on the state.
         switch (opPtr->state)
@@ -748,6 +752,57 @@ static void TruncateBuffer
 
         (obsPtr->count)--;
     }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Update the value of a data sample by replacing it, if necessary
+ */
+//--------------------------------------------------------------------------------------------------
+static dataSample_Ref_t UpdateSample
+(
+    dataSample_Ref_t sampleRef,
+    io_DataType_t dataType,
+    void *valuePtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    dataSample_Ref_t sample = sampleRef;
+    double timestamp = dataSample_GetTimestamp(sampleRef);
+
+
+    switch (dataType)
+    {
+        case IO_DATA_TYPE_BOOLEAN:
+        {
+            bool value = *((double *)valuePtr) > 0.0 ? true : false;
+            if (dataSample_GetBoolean(sampleRef) != value)
+            {
+                sample = dataSample_CreateBoolean(timestamp, value);
+            }
+            break;
+        }
+
+        case IO_DATA_TYPE_NUMERIC:
+        {
+            double value = *((double *)valuePtr);
+            if (dataSample_GetNumeric(sampleRef) != value)
+            {
+                sample = dataSample_CreateNumeric(timestamp, value);
+            }
+        }
+
+        default:
+            break;
+    }
+
+    if (sample != sampleRef)
+    {
+        le_mem_Release(sampleRef);
+    }
+
+    return sample;
 }
 
 
@@ -1323,6 +1378,8 @@ res_Resource_t* obs_Create
     obsPtr->maxCount = 0;
     obsPtr->count = 0;
 
+    obsPtr->transformType = OBS_TRANSFORM_TYPE_NONE;
+
     obsPtr->bufferedType = IO_DATA_TYPE_TRIGGER;
 
     obsPtr->backupPeriod = 0;
@@ -1505,7 +1562,7 @@ bool obs_ShouldAccept
             && (!isnan(obsPtr->lowLimit))
             && (obsPtr->lowLimit > obsPtr->highLimit)  )
         {
-            if ((numericValue > obsPtr->lowLimit) || (numericValue < obsPtr->highLimit))
+            if ((numericValue < obsPtr->lowLimit) && (numericValue > obsPtr->highLimit))
             {
                 return false;
             }
@@ -1657,6 +1714,60 @@ void obs_ProcessAccepted
             }
         }
     }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform any post-filtering on a given Observation.
+ */
+//--------------------------------------------------------------------------------------------------
+dataSample_Ref_t obs_ApplyTransform
+(
+    res_Resource_t* resPtr,
+    io_DataType_t dataType,     ///< Data type of the data sample.
+    dataSample_Ref_t sampleRef  ///< Data sample.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+    dataSample_Ref_t sample = sampleRef;
+    double transformVal;
+
+
+    switch (obsPtr->transformType)
+    {
+        case OBS_TRANSFORM_TYPE_NONE:
+            break;
+
+        case OBS_TRANSFORM_TYPE_MEAN:
+            transformVal = obs_QueryMean(resPtr, NAN);
+            break;
+
+        case OBS_TRANSFORM_TYPE_STDDEV:
+            transformVal = obs_QueryStdDev(resPtr, NAN);
+            break;
+
+        case OBS_TRANSFORM_TYPE_MAX:
+            transformVal = obs_QueryMax(resPtr, NAN);
+            break;
+
+        case OBS_TRANSFORM_TYPE_MIN:
+            transformVal = obs_QueryMin(resPtr, NAN);
+            break;
+
+        default:
+            LE_FATAL("Invalid transform type %d", obsPtr->transformType);
+            break;
+    }
+
+    // If transformed value differs from the input sample, update the sample
+    if (OBS_TRANSFORM_TYPE_NONE != obsPtr->transformType)
+    {
+        sample = UpdateSample(sampleRef, dataType, (void *)&transformVal);
+    }
+
+    return sample;
 }
 
 
@@ -1817,6 +1928,68 @@ double obs_GetChangeBy
     Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
 
     return obsPtr->changeBy;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform a transform on buffered data. Value of the observation will be the output of the
+ * transform
+ *
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false.
+ */
+//--------------------------------------------------------------------------------------------------
+void obs_SetTransform
+(
+    res_Resource_t* resPtr,
+    obs_TransformType_t transformType,
+    const double* paramsPtr,
+    size_t paramsSize
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    obsPtr->transformType = transformType;
+
+    // If the transform is being set to anything other than NONE, ensure there is at least one
+    // data sample buffered in order to allow transforms to behave properly
+    if (   (OBS_TRANSFORM_TYPE_NONE != obsPtr->transformType)
+        && (0 == obsPtr->maxCount))
+    {
+        obsPtr->maxCount = 1;
+    }
+
+    // Clear the buffer and current value of the observation.  Do this even if the same transform
+    // is being re-applied.  This allows any cumulative behavior to be cleared
+    TruncateBuffer(obsPtr, 0);
+    if (resPtr->pushedValue != NULL)
+    {
+        le_mem_Release(resPtr->pushedValue);
+        resPtr->pushedValue = NULL;
+    }
+
+    (void)paramsPtr;
+    (void)paramsSize;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the type of transform currently applied to an Observation.
+ *
+ * @return The TransformType
+ */
+//--------------------------------------------------------------------------------------------------
+obs_TransformType_t obs_GetTransform
+(
+    res_Resource_t* resPtr
+)
+//--------------------------------------------------------------------------------------------------
+{
+    Observation_t* obsPtr = CONTAINER_OF(resPtr, Observation_t, resource);
+
+    return obsPtr->transformType;
 }
 
 

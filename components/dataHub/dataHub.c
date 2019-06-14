@@ -30,6 +30,7 @@
 #include "ioPoint.h"
 #include "obs.h"
 #include "ioService.h"
+#include "adminService.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -46,6 +47,7 @@ COMPONENT_INIT
     obs_Init();
     resTree_Init();
     ioService_Init();
+    adminService_Init();
 
     LE_INFO("Data Hub started.");
 }

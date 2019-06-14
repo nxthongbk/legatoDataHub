@@ -11,6 +11,7 @@
 #include "dataSample.h"
 #include "resource.h"
 #include "resTree.h"
+#include "adminService.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -319,6 +320,24 @@ static void ReplaceResource
     entryRef->type = replacementType;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Notify handlers that a Resource has been added or removed from the tree
+ */
+//--------------------------------------------------------------------------------------------------
+static void CallResourceTreeChangeHandlers
+(
+    resTree_EntryRef_t entryRef,
+    admin_EntryType_t entryType,
+    admin_ResourceOperationType_t resourceOperationType
+)
+//--------------------------------------------------------------------------------------------------
+{
+    char absolutePath[HUB_MAX_RESOURCE_PATH_BYTES];
+    resTree_GetPath(absolutePath, HUB_MAX_RESOURCE_PATH_BYTES, RootPtr, entryRef);
+    admin_CallResourceTreeChangeHandlers(absolutePath, entryType, resourceOperationType);
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -535,6 +554,9 @@ resTree_EntryRef_t resTree_GetInput
         {
             res_Resource_t* resPtr = res_CreateInput(entryRef, dataType, units);
             ReplaceResource(entryRef, resPtr, ADMIN_ENTRY_TYPE_INPUT);
+
+            CallResourceTreeChangeHandlers(entryRef, ADMIN_ENTRY_TYPE_INPUT, ADMIN_RESOURCE_ADDED);
+
             return entryRef;
         }
         case ADMIN_ENTRY_TYPE_INPUT:
@@ -595,12 +617,15 @@ resTree_EntryRef_t resTree_GetOutput
     switch (entryRef->type)
     {
         // If a Namespace or Placeholder currently resides at that spot in the tree, replace it with
-        // an Input.
+        // an Output.
         case ADMIN_ENTRY_TYPE_NAMESPACE:
         case ADMIN_ENTRY_TYPE_PLACEHOLDER:
         {
             res_Resource_t* resPtr = res_CreateOutput(entryRef, dataType, units);
             ReplaceResource(entryRef, resPtr, ADMIN_ENTRY_TYPE_OUTPUT);
+
+            CallResourceTreeChangeHandlers(entryRef, ADMIN_ENTRY_TYPE_OUTPUT, ADMIN_RESOURCE_ADDED);
+
             return entryRef;
         }
         case ADMIN_ENTRY_TYPE_INPUT:
@@ -665,6 +690,9 @@ resTree_EntryRef_t resTree_GetObservation
             res_Resource_t* obsPtr = res_CreateObservation(entryRef);
             ReplaceResource(entryRef, obsPtr, ADMIN_ENTRY_TYPE_OBSERVATION);
             res_RestoreBackup(obsPtr);
+
+            CallResourceTreeChangeHandlers(entryRef, ADMIN_ENTRY_TYPE_OBSERVATION, ADMIN_RESOURCE_ADDED);
+
             return entryRef;
         }
         case ADMIN_ENTRY_TYPE_INPUT:
@@ -993,6 +1021,12 @@ void resTree_DeleteIO
 {
     res_Resource_t* ioPtr = entryRef->resourcePtr;
 
+    // Call handlers before we release the Resource memory, or re-assign it to
+    // become a placeholder. Replacing with a placeholder is still considered a "remove"
+    // operation; the placeholder merely preserves any admin settings until the Resource
+    // is re-created.
+    CallResourceTreeChangeHandlers(entryRef, entryRef->type, ADMIN_RESOURCE_REMOVED);
+
     if (res_HasAdminSettings(ioPtr))
     {
         // There are still administrative settings present on this resource, so replace it
@@ -1027,6 +1061,8 @@ void resTree_DeleteObservation
 )
 //--------------------------------------------------------------------------------------------------
 {
+    CallResourceTreeChangeHandlers(obsEntry, ADMIN_ENTRY_TYPE_OBSERVATION, ADMIN_RESOURCE_REMOVED);
+
     // Delete the Observation resource object.
     res_DeleteObservation(obsEntry->resourcePtr);
 
@@ -1181,6 +1217,44 @@ double resTree_GetChangeBy
 //--------------------------------------------------------------------------------------------------
 {
     return res_GetChangeBy(obsEntry->resourcePtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform a transform on buffered data. Value of the observation will be the output of the
+ * transform
+ *
+ * Ignored for all non-numeric types except Boolean for which non-zero = true and zero = false.
+ */
+//--------------------------------------------------------------------------------------------------
+void resTree_SetTransform
+(
+    resTree_EntryRef_t obsEntry,
+    admin_TransformType_t transformType,
+    const double* paramsPtr,
+    size_t paramsSize
+)
+//--------------------------------------------------------------------------------------------------
+{
+    res_SetTransform(obsEntry->resourcePtr, transformType, paramsPtr, paramsSize);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the type of transform currently applied to an Observation.
+ *
+ * @return The TransformType
+ */
+//--------------------------------------------------------------------------------------------------
+admin_TransformType_t resTree_GetTransform
+(
+    resTree_EntryRef_t obsEntry
+)
+//--------------------------------------------------------------------------------------------------
+{
+    return res_GetTransform(obsEntry->resourcePtr);
 }
 
 
