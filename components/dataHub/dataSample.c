@@ -33,6 +33,7 @@ typedef struct DataSample
         bool boolean;
         double numeric;
         char string[0]; ///< A string type data sample has space for the array after this struct.
+                        ///< @warning This union MUST BE the LAST MEMBER of DataSample_t.
     } value;
 }
 DataSample_t;
@@ -42,12 +43,10 @@ DataSample_t;
 #define SMALL_STRING_BYTES 300
 
 /// The number of bytes to allocate in a (small) String Data Sample Pool block.
-#define SMALL_STRING_SAMPLE_OBJECT_BYTES (sizeof(DataSample_t) + SMALL_STRING_BYTES \
-                                          - sizeof(double))
+#define SMALL_STRING_SAMPLE_OBJECT_BYTES (offsetof(DataSample_t, value) + SMALL_STRING_BYTES)
 
 /// The number of bytes to allocate in a Huge String Data Sample Pool block.
-#define HUGE_STRING_SAMPLE_OBJECT_BYTES (sizeof(DataSample_t) + HUB_MAX_STRING_BYTES \
-                                         - sizeof(double))
+#define HUGE_STRING_SAMPLE_OBJECT_BYTES (offsetof(DataSample_t, value) + HUB_MAX_STRING_BYTES)
 
 /// Pool of Data Sample objects that don't hold strings.
 static le_mem_PoolRef_t NonStringSamplePool = NULL;
@@ -87,21 +86,13 @@ void dataSample_Init
  * @return True if a given string is shorter than SMALL_STRING_BYTES, including its null terminator.
  */
 //--------------------------------------------------------------------------------------------------
-static bool IsSmallString
+static inline bool IsSmallString
 (
     const char* string
 )
 //--------------------------------------------------------------------------------------------------
 {
-    for (uint i = 0; i < SMALL_STRING_BYTES; i++)
-    {
-        if (string[i] == '\0')
-        {
-            return true;
-        }
-    }
-
-    return false;
+    return (strnlen(string, SMALL_STRING_BYTES) < SMALL_STRING_BYTES);
 }
 
 
