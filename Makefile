@@ -44,7 +44,7 @@ start: stop all
 stop:
 	stoplegato
 
-IFGEN_FLAGS = --gen-interface --output-dir _build_docs
+IFGEN_FLAGS = --gen-interface --gen-common-interface --output-dir _build_docs
 
 .PHONY: docs
 docs:
