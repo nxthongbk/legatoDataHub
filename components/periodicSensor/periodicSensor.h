@@ -134,6 +134,9 @@ bindings:
 #ifndef PERIODIC_SENSOR_H_INCLUDE_GUARD
 #define PERIODIC_SENSOR_H_INCLUDE_GUARD
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -257,5 +260,8 @@ LE_SHARED void psensor_PushJson
     const char* value
 );
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif // PERIODIC_SENSOR_H_INCLUDE_GUARD
